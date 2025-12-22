@@ -23,11 +23,11 @@ const Terminal: React.FC<TerminalProps> = ({ history, onCommand }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
-    
+
     // PSReadLine style history management
     setLocalHistory(prev => [input, ...prev.slice(0, 49)]);
     setHistoryIndex(-1);
-    
+
     onCommand(input);
     setInput('');
   };
@@ -61,20 +61,20 @@ const Terminal: React.FC<TerminalProps> = ({ history, onCommand }) => {
           Windows PowerShell (PSReadLine Simulation v2.2.6)<br />
           Copyright (C) Willow Symphony. All rights reserved.
         </div>
-        
+
         {history.map((line, i) => (
           <div key={i} className={`mb-1 break-all flex items-start ${line.type === 'error' ? 'text-rose-400' : line.type === 'input' ? 'text-cyan-400 text-glow-cyan' : 'text-cyan-200/60'}`}>
             <span className="mr-3 opacity-30 select-none">[{new Date(line.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}]</span>
-            <span className="mr-2 opacity-50 select-none">PS C:\></span>
+            <span className="mr-2 opacity-50 select-none">PS C:\&gt;</span>
             <span className="flex-1">{line.text}</span>
           </div>
         ))}
       </div>
       <form onSubmit={handleSubmit} className="flex mt-6 bg-cyan-950/20 p-3 rounded-xl border border-cyan-900/30">
-        <span className="text-cyan-500 mr-2 font-black select-none">PS C:\></span>
-        <input 
+        <span className="text-cyan-500 mr-2 font-black select-none">PS C:\&gt;</span>
+        <input
           ref={inputRef}
-          type="text" 
+          type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
@@ -84,8 +84,8 @@ const Terminal: React.FC<TerminalProps> = ({ history, onCommand }) => {
         />
       </form>
       <div className="mt-2 text-[9px] text-cyan-900 font-black uppercase tracking-widest flex justify-between px-2 opacity-40 select-none">
-         <span>PSReadLine Enabled</span>
-         <span>[Up/Down] History</span>
+        <span>PSReadLine Enabled</span>
+        <span>[Up/Down] History</span>
       </div>
     </div>
   );
