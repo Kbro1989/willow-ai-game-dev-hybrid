@@ -6,7 +6,7 @@
 import { Message, CodeCompletion, UserPreferences, FileNode, TodoTask, SceneObject, TokenMetrics } from "../types";
 
 // Configure worker URL - uses deployed ai-game-studio worker
-const WORKER_URL = 'https://ai-game-studio.pick-of-gods.workers.dev';
+const WORKER_URL = 'http://localhost:8788'; // Local Dev URL
 
 // Simple rate limiter for UI metrics display
 class CloudflareRateLimiter {
