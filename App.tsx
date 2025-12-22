@@ -1,9 +1,9 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { 
-  FileNode, ProjectState, TerminalLine, GitCommit, TodoTask, 
-  TokenMetrics, BuildInfo, GameAsset, SceneObject, PhysicsConfig, 
-  PipelineConfig, RenderConfig, CompositingConfig, SimulationState, 
+import {
+  FileNode, ProjectState, TerminalLine, GitCommit, TodoTask,
+  TokenMetrics, BuildInfo, GameAsset, SceneObject, PhysicsConfig,
+  PipelineConfig, RenderConfig, CompositingConfig, SimulationState,
   WorldConfig, SculptPoint, EngineAction, EngineLog, NeuralNode, NeuralEdge,
   Workspace, Message, UserPreferences, Extension
 } from './types';
@@ -14,15 +14,15 @@ import Chat, { ChatHandle } from './components/Chat';
 import GameDashboard from './components/GameDashboard';
 import DiagnosticsPanel from './components/DiagnosticsPanel';
 import { initialFiles } from './constants';
-import { limiter } from './services/geminiService';
+import { cloudlareLimiter as limiter } from './services/cloudflareService';
 
 const DEFAULT_WORKSPACE_NAME = 'Willow Studio Professional';
 const STORAGE_KEY = 'antigravity_pro_workspace_v1';
 
 const initialExtensions: Extension[] = [
-  {"identifier":{"id":"github.vscode-pull-request-github","uuid":"69ddd764-339a-4ecc-97c1-9c4ece58e36d"},"version":"0.118.2","location":{"path":"/c:/Users/Destiny/.antigravity/extensions/github.vscode-pull-request-github-0.118.2-universal","scheme":"file"},"relativeLocation":"github.vscode-pull-request-github-0.118.2-universal","metadata":{"installedTimestamp":1763713687525,"pinned":false,"source":"gallery","id":"69ddd764-339a-4ecc-97c1-9c4ece58e36d","publisherId":"7c1c19cd-78eb-4dfb-8999-99caf7679002","publisherDisplayName":"GitHub","targetPlatform":"universal","updated":false,"private":false,"isPreReleaseVersion":false,"hasPreReleaseVersion":false}},
-  {"identifier":{"id":"slevesque.vscode-3dviewer","uuid":"22074919-af0e-4e0c-928d-7149d7a68ede"},"version":"0.2.2","location":{"path":"/c:/Users/Destiny/.antigravity/extensions/slevesque.vscode-3dviewer-0.2.2-universal","scheme":"file"},"relativeLocation":"slevesque.vscode-3dviewer-0.2.2-universal","metadata":{"installedTimestamp":1763713800388,"pinned":false,"source":"gallery","id":"22074919-af0e-4e0c-928d-7149d7a68ede","publisherId":"30cbfd41-b05d-4739-9271-f782deb68b9e","publisherDisplayName":"slevesque","targetPlatform":"universal","updated":false,"private":false,"isPreReleaseVersion":false,"hasPreReleaseVersion":false}},
-  {"identifier":{"id":"ms-vscode.powershell","uuid":"40d39ce9-c381-47a0-80c8-a6661f731eab"},"version":"2025.4.0","location":{"path":"/c:/Users/Destiny/.antigravity/extensions/ms-vscode.powershell-2025.4.0-universal","scheme":"file"},"relativeLocation":"ms-vscode.powershell-2025.4.0-universal","metadata":{"installedTimestamp":1763842466701,"source":"gallery","id":"40d39ce9-c381-47a0-80c8-a6661f731eab","publisherId":"5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee","publisherDisplayName":"ms-vscode","targetPlatform":"universal","updated":false,"private":false,"isPreReleaseVersion":false,"hasPreReleaseVersion":false}}
+  { "identifier": { "id": "github.vscode-pull-request-github", "uuid": "69ddd764-339a-4ecc-97c1-9c4ece58e36d" }, "version": "0.118.2", "location": { "path": "/c:/Users/Destiny/.antigravity/extensions/github.vscode-pull-request-github-0.118.2-universal", "scheme": "file" }, "relativeLocation": "github.vscode-pull-request-github-0.118.2-universal", "metadata": { "installedTimestamp": 1763713687525, "pinned": false, "source": "gallery", "id": "69ddd764-339a-4ecc-97c1-9c4ece58e36d", "publisherId": "7c1c19cd-78eb-4dfb-8999-99caf7679002", "publisherDisplayName": "GitHub", "targetPlatform": "universal", "updated": false, "private": false, "isPreReleaseVersion": false, "hasPreReleaseVersion": false } },
+  { "identifier": { "id": "slevesque.vscode-3dviewer", "uuid": "22074919-af0e-4e0c-928d-7149d7a68ede" }, "version": "0.2.2", "location": { "path": "/c:/Users/Destiny/.antigravity/extensions/slevesque.vscode-3dviewer-0.2.2-universal", "scheme": "file" }, "relativeLocation": "slevesque.vscode-3dviewer-0.2.2-universal", "metadata": { "installedTimestamp": 1763713800388, "pinned": false, "source": "gallery", "id": "22074919-af0e-4e0c-928d-7149d7a68ede", "publisherId": "30cbfd41-b05d-4739-9271-f782deb68b9e", "publisherDisplayName": "slevesque", "targetPlatform": "universal", "updated": false, "private": false, "isPreReleaseVersion": false, "hasPreReleaseVersion": false } },
+  { "identifier": { "id": "ms-vscode.powershell", "uuid": "40d39ce9-c381-47a0-80c8-a6661f731eab" }, "version": "2025.4.0", "location": { "path": "/c:/Users/Destiny/.antigravity/extensions/ms-vscode.powershell-2025.4.0-universal", "scheme": "file" }, "relativeLocation": "ms-vscode.powershell-2025.4.0-universal", "metadata": { "installedTimestamp": 1763842466701, "source": "gallery", "id": "40d39ce9-c381-47a0-80c8-a6661f731eab", "publisherId": "5f5636e7-69ed-4afe-b5d6-8d231fb3d3ee", "publisherDisplayName": "ms-vscode", "targetPlatform": "universal", "updated": false, "private": false, "isPreReleaseVersion": false, "hasPreReleaseVersion": false } }
 ];
 
 const App: React.FC = () => {
@@ -243,8 +243,8 @@ const App: React.FC = () => {
       position: [0, 0, 0],
       rotation: [0, 0, 0],
       scale: [1, 1, 1],
-      ...o, 
-      id: `obj-${Math.random().toString(36).slice(2,8)}`
+      ...o,
+      id: `obj-${Math.random().toString(36).slice(2, 8)}`
     } as any]);
   }, []);
 
@@ -311,7 +311,7 @@ const App: React.FC = () => {
     if (buildInfo.status === 'building') return;
     setBuildInfo({ status: 'building', progress: 0, buildPrompt: prompt });
     addLog('Relay Provisioning...', 'info', 'Overwatch');
-    
+
     // Switch to dashboard view if not already
     if (!isPresenting) setBottomPanel('dashboard');
 
@@ -338,12 +338,12 @@ const App: React.FC = () => {
     }
     return undefined;
   })(project.files, project.activeFile) : null;
-  
+
   const activeFileContent = activeFileNode?.content || '';
 
   // Determine dashboard visibility and styling for persistence
   const showDashboard = bottomPanel === 'dashboard' || isPresenting;
-  const dashboardStyle: React.CSSProperties = isPresenting 
+  const dashboardStyle: React.CSSProperties = isPresenting
     ? { position: 'fixed', inset: 0, zIndex: 50, width: '100vw', height: '100vh' }
     : { position: 'absolute', bottom: 0, right: 0, left: `${sidebarWidth}px`, height: `${bottomHeight}px`, zIndex: 10 };
 
@@ -351,15 +351,15 @@ const App: React.FC = () => {
     <div className={`flex h-screen w-full bg-[#050a15] text-white/90 overflow-hidden font-sans select-none transition-all duration-700 ${isPresenting ? 'presentation-active' : ''}`}>
       {!isPresenting && (
         <div style={{ width: `${sidebarWidth}px` }} className="flex flex-col z-20 relative shrink-0 transition-transform duration-500">
-          <Sidebar 
-            isOpen={true} setIsOpen={() => {}} files={project.files} activeFile={project.activeFile}
+          <Sidebar
+            isOpen={true} setIsOpen={() => { }} files={project.files} activeFile={project.activeFile}
             onSelectFile={(p) => setProject(prev => ({ ...prev, activeFile: p }))}
             onCreateNode={handleCreateNode}
             stagedFiles={stagedFiles} onStage={(p) => setStagedFiles(prev => [...prev, p])} onUnstage={(p) => setStagedFiles(prev => prev.filter(f => f !== p))}
             onCommit={(m) => setCommitHistory(prev => [{ id: Date.now().toString(), message: m, author: 'Willow Master', timestamp: Date.now() }, ...prev])}
             commitHistory={commitHistory} tasks={tasks}
             onToggleTask={(id) => setTasks(prev => prev.map(t => t.id === id ? { ...t, completed: !t.completed } : t))}
-            onAddTasks={(nt) => setTasks(prev => [...prev, ...nt.map(t => ({...t, id: Math.random().toString(36), completed: false}))])}
+            onAddTasks={(nt) => setTasks(prev => [...prev, ...nt.map(t => ({ ...t, id: Math.random().toString(36), completed: false }))])}
             tokenMetrics={tokenMetrics} sceneObjects={sceneObjects} userPrefs={userPrefs} extensions={extensions} onUninstallExtension={handleUninstallExtension}
           />
           <div onMouseDown={() => setIsResizingSidebar(true)} className="absolute top-0 -right-1 w-2 h-full cursor-col-resize z-50 group">
@@ -373,7 +373,7 @@ const App: React.FC = () => {
           <header className="h-16 border-b border-cyan-900/30 flex items-center justify-between px-10 bg-[#0a1222]/80 z-10 shrink-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl transition-all duration-500">
             <div className="flex items-center space-x-12">
               <div className="relative">
-                <button 
+                <button
                   onClick={() => setIsWorkspaceSwitcherOpen(!isWorkspaceSwitcherOpen)}
                   className="flex items-center space-x-6 bg-[#0a1222] px-6 py-2 rounded-2xl border border-cyan-500/20 hover:border-cyan-400 transition-all group shadow-[0_0_15px_rgba(0,242,255,0.1)]"
                 >
@@ -388,19 +388,19 @@ const App: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center space-x-12">
-               <div className="hidden xl:flex flex-col items-end">
-                  <div className="flex items-center space-x-3 mb-1">
-                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Neural Link</span>
-                    <button onClick={() => setIsOverwatchActive(!isOverwatchActive)} className={`w-8 h-4 rounded-full transition-colors relative ${isOverwatchActive ? 'bg-cyan-600 shadow-[0_0_10px_#00f2ff]' : 'bg-slate-800'}`}>
-                      <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isOverwatchActive ? 'left-4.5' : 'left-0.5'}`}></div>
-                    </button>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <span className="text-[10px] text-cyan-400 font-black uppercase tracking-tighter">Flux Sync: Optimized</span>
-                    <div className="w-3 h-3 rounded-full bg-cyan-500 shadow-[0_0_15px_#00f2ff] animate-pulse"></div>
-                  </div>
-               </div>
-               <button onClick={() => handleBuild()} className="relative overflow-hidden group px-12 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(0,242,255,0.4)]">Push & Hot-Swap</button>
+              <div className="hidden xl:flex flex-col items-end">
+                <div className="flex items-center space-x-3 mb-1">
+                  <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Neural Link</span>
+                  <button onClick={() => setIsOverwatchActive(!isOverwatchActive)} className={`w-8 h-4 rounded-full transition-colors relative ${isOverwatchActive ? 'bg-cyan-600 shadow-[0_0_10px_#00f2ff]' : 'bg-slate-800'}`}>
+                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isOverwatchActive ? 'left-4.5' : 'left-0.5'}`}></div>
+                  </button>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <span className="text-[10px] text-cyan-400 font-black uppercase tracking-tighter">Flux Sync: Optimized</span>
+                  <div className="w-3 h-3 rounded-full bg-cyan-500 shadow-[0_0_15px_#00f2ff] animate-pulse"></div>
+                </div>
+              </div>
+              <button onClick={() => handleBuild()} className="relative overflow-hidden group px-12 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(0,242,255,0.4)]">Push & Hot-Swap</button>
             </div>
           </header>
         )}
@@ -428,17 +428,17 @@ const App: React.FC = () => {
               {bottomPanel === 'terminal' && <Terminal history={terminalHistory} onCommand={(c) => addLog(`Exec: ${c}`, 'info', 'Binary')} />}
               {bottomPanel === 'diagnostics' && <DiagnosticsPanel />}
               {bottomPanel === 'chat' && (
-                <Chat 
+                <Chat
                   ref={chatRef} project={project} sceneObjects={sceneObjects} physics={physics} worldConfig={worldConfig}
                   renderConfig={renderConfig} compositingConfig={compositingConfig} simulation={simulation}
                   isOverwatchActive={isOverwatchActive} messages={chatMessages} setMessages={setChatMessages}
-                  userPrefs={userPrefs} onFileUpdate={handleFileChange} 
+                  userPrefs={userPrefs} onFileUpdate={handleFileChange}
                   onAddSceneObject={handleAddSceneObject}
-                  onUpdateSceneObject={handleUpdateSceneObject} onUpdatePhysics={(u) => setPhysics(p => ({...p, ...u}))}
-                  onUpdateWorld={(u) => setWorldConfig(p => ({...p, ...u}))}
-                  onUpdateConfig={(t, u) => { if (t === 'render') setRenderConfig(p => ({...p, ...u})); else setCompositingConfig(p => ({...p, ...u})); }}
+                  onUpdateSceneObject={handleUpdateSceneObject} onUpdatePhysics={(u) => setPhysics(p => ({ ...p, ...u }))}
+                  onUpdateWorld={(u) => setWorldConfig(p => ({ ...p, ...u }))}
+                  onUpdateConfig={(t, u) => { if (t === 'render') setRenderConfig(p => ({ ...p, ...u })); else setCompositingConfig(p => ({ ...p, ...u })); }}
                   onRemoveSceneObject={(id) => setSceneObjects(prev => prev.filter(o => o.id !== id))}
-                  onInjectScript={handleInjectScript} onSyncVariableData={handleSyncVariableData} 
+                  onInjectScript={handleInjectScript} onSyncVariableData={handleSyncVariableData}
                   extensions={extensions} projectVersion={projectVersion} onUpdateVersion={setProjectVersion}
                   onTriggerBuild={() => handleBuild('Agent Directive Mutation')}
                   onTriggerPresentation={() => setIsPresenting(true)}
@@ -451,34 +451,34 @@ const App: React.FC = () => {
       </div>
 
       {/* Persistent GameDashboard Layer - Never unmounts to preserve WebGL Context */}
-      <div 
-         className={`transition-all duration-500 ease-in-out bg-black ${showDashboard ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none delay-200'}`}
-         style={dashboardStyle}
+      <div
+        className={`transition-all duration-500 ease-in-out bg-black ${showDashboard ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none delay-200'}`}
+        style={dashboardStyle}
       >
-         <GameDashboard 
-           onBuild={handleBuild} buildInfo={buildInfo} assets={assets} physics={physics} worldConfig={worldConfig} sceneObjects={sceneObjects}
-           pipelines={pipelines} renderConfig={renderConfig} compositingConfig={compositingConfig} simulation={simulation}
-           onUpdatePhysics={(u) => setPhysics(prev => ({...prev, ...u}))} onUpdateWorld={(u) => setWorldConfig(p => ({...p, ...u}))}
-           onImportAsset={(a) => addLog(`Linked: ${a.name}`, 'success', 'Neural')} onUpdateSceneObject={handleUpdateSceneObject}
-           onAddSceneObject={handleAddSceneObject}
-           onUpdateConfig={(t, u) => { if (t === 'render') setRenderConfig(p => ({...p, ...u})); else setCompositingConfig(p => ({...p, ...u})); }}
-           onRunAction={(c) => { 
-             if (c === 'PRESENT_BUILD') setIsPresenting(true); 
-             else if (c === 'EXIT_PRESENTATION') setIsPresenting(false);
-             else if (c === 'RUN_TEST_SUITE') {
-                setBottomPanel('chat'); 
-                chatRef.current?.sendMessage("Director, initiate full runtime test suite.");
-                addLog(`Command: ${c}`, 'info', 'Director');
-             }
-             else addLog(`Event: ${c}`, 'info', 'Director'); 
-           }} 
-           onSendVisualFeedback={(img) => { setBottomPanel('chat'); chatRef.current?.addAnnotatedMessage(img); }}
-           sculptHistory={sculptHistory} redoStack={[]} onSculptTerrain={(p) => setSculptHistory(prev => [...prev, {...p, brushSize: worldConfig.brushSize, brushStrength: worldConfig.brushStrength}])}
-           onUndoSculpt={() => setSculptHistory(prev => prev.slice(0, -1))} onRedoSculpt={() => {}} onClearSculpt={() => setSculptHistory([])}
-           nodes={nodes} edges={edges} onNeuralUpdate={handleNeuralUpdate} variableData={variableData} engineLogs={engineLogs}
-           onAddAsset={(newAsset) => setAssets(prev => [...prev, newAsset])}
-           isFullscreen={isPresenting}
-         />
+        <GameDashboard
+          onBuild={handleBuild} buildInfo={buildInfo} assets={assets} physics={physics} worldConfig={worldConfig} sceneObjects={sceneObjects}
+          pipelines={pipelines} renderConfig={renderConfig} compositingConfig={compositingConfig} simulation={simulation}
+          onUpdatePhysics={(u) => setPhysics(prev => ({ ...prev, ...u }))} onUpdateWorld={(u) => setWorldConfig(p => ({ ...p, ...u }))}
+          onImportAsset={(a) => addLog(`Linked: ${a.name}`, 'success', 'Neural')} onUpdateSceneObject={handleUpdateSceneObject}
+          onAddSceneObject={handleAddSceneObject}
+          onUpdateConfig={(t, u) => { if (t === 'render') setRenderConfig(p => ({ ...p, ...u })); else setCompositingConfig(p => ({ ...p, ...u })); }}
+          onRunAction={(c) => {
+            if (c === 'PRESENT_BUILD') setIsPresenting(true);
+            else if (c === 'EXIT_PRESENTATION') setIsPresenting(false);
+            else if (c === 'RUN_TEST_SUITE') {
+              setBottomPanel('chat');
+              chatRef.current?.sendMessage("Director, initiate full runtime test suite.");
+              addLog(`Command: ${c}`, 'info', 'Director');
+            }
+            else addLog(`Event: ${c}`, 'info', 'Director');
+          }}
+          onSendVisualFeedback={(img) => { setBottomPanel('chat'); chatRef.current?.addAnnotatedMessage(img); }}
+          sculptHistory={sculptHistory} redoStack={[]} onSculptTerrain={(p) => setSculptHistory(prev => [...prev, { ...p, brushSize: worldConfig.brushSize, brushStrength: worldConfig.brushStrength }])}
+          onUndoSculpt={() => setSculptHistory(prev => prev.slice(0, -1))} onRedoSculpt={() => { }} onClearSculpt={() => setSculptHistory([])}
+          nodes={nodes} edges={edges} onNeuralUpdate={handleNeuralUpdate} variableData={variableData} engineLogs={engineLogs}
+          onAddAsset={(newAsset) => setAssets(prev => [...prev, newAsset])}
+          isFullscreen={isPresenting}
+        />
       </div>
     </div>
   );
