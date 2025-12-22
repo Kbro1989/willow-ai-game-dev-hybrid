@@ -1,0 +1,9 @@
+{
+  "name": "Willow Symphony | Master Game Director",
+  "description": "High-fidelity AI Game Studio powered by Google Gemini 3 & Veo. Features autonomous planning, multimodal synthesis, and real-time neural interaction.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone",
+    "geolocation"
+  ]
+}
