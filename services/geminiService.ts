@@ -1,6 +1,11 @@
+/**
+ * Gemini-Only Service (Hybrid Mode)
+ * Keeps only features that require Gemini: Live Audio and VEO Video
+ * All text/image/code functions migrated to cloudflareService.ts
+ */
 
-import { GoogleGenAI, Type, Modality, GenerateContentResponse, LiveServerMessage, FunctionDeclaration } from "@google/genai";
-import { Message, ModelKey, CodeCompletion, AgentTask, TokenMetrics, UserPreferences, GroundingChunk, FileNode, TodoTask, SceneObject } from "../types";
+import { GoogleGenAI, Modality, LiveServerMessage, FunctionDeclaration, Type } from "@google/genai";
+import { ModelKey } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -31,18 +36,7 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
   return buffer;
 }
 
-class RateLimiter {
-  private usedTokens: number = 0;
-  private readonly PRO_LIMIT = 20000000;
-
-  addUsage(tokens: number) { this.usedTokens += tokens; }
-  getMetrics(): TokenMetrics { return { used: this.usedTokens, limit: this.PRO_LIMIT, isFallbackActive: this.usedTokens > (this.PRO_LIMIT * 0.9) }; }
-  shouldFallback(): boolean { return this.usedTokens > (this.PRO_LIMIT * 0.9); }
-}
-
-export const limiter = new RateLimiter();
-
-// The "Antigravity Protocol" Toolset
+// IDE Tools for Live Audio Session
 const ideTools: FunctionDeclaration[] = [
   {
     name: 'ide_propose_sprint',
@@ -52,17 +46,7 @@ const ideTools: FunctionDeclaration[] = [
       properties: {
         version: { type: Type.STRING },
         goals: { type: Type.ARRAY, items: { type: Type.STRING } },
-        tasks: { 
-          type: Type.ARRAY, 
-          items: { 
-            type: Type.OBJECT, 
-            properties: { 
-              id: { type: Type.STRING },
-              description: { type: Type.STRING },
-              type: { type: Type.STRING }
-            }
-          }
-        }
+        tasks: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, description: { type: Type.STRING }, type: { type: Type.STRING } } } }
       },
       required: ['version', 'goals', 'tasks']
     }
@@ -71,12 +55,8 @@ const ideTools: FunctionDeclaration[] = [
     name: 'ide_filesystem_mutation',
     parameters: {
       type: Type.OBJECT,
-      description: 'Inject high-performance, modular code. Optimized for WebGPU/Antigravity standards.',
-      properties: {
-        path: { type: Type.STRING },
-        content: { type: Type.STRING },
-        optimization: { type: Type.STRING, description: 'e.g., "batching", "tree-shaking", "worker-isolated"' }
-      },
+      description: 'Inject code into the filesystem.',
+      properties: { path: { type: Type.STRING }, content: { type: Type.STRING }, optimization: { type: Type.STRING } },
       required: ['path', 'content']
     }
   },
@@ -84,64 +64,27 @@ const ideTools: FunctionDeclaration[] = [
     name: 'ide_matrix_intervention',
     parameters: {
       type: Type.OBJECT,
-      description: 'Modify 3D entities. Understands nested hierarchies and material instances.',
-      properties: {
-        action: { type: Type.STRING, enum: ['add', 'update', 'remove'] },
-        payload: { type: Type.STRING }
-      },
+      description: 'Modify 3D entities.',
+      properties: { action: { type: Type.STRING, enum: ['add', 'update', 'remove'] }, payload: { type: Type.STRING } },
       required: ['action', 'payload']
-    }
-  },
-  {
-    name: 'ide_test_runtime',
-    parameters: {
-      type: Type.OBJECT,
-      description: 'Execute a build and run automated tests on the current runtime state.',
-      properties: {
-        testCase: { type: Type.STRING, description: 'Logic to verify, e.g., "collision_check", "frame_rate_stability", "variable_sync"' },
-        duration: { type: Type.NUMBER, description: 'Test duration in seconds.' }
-      },
-      required: ['testCase']
     }
   },
   {
     name: 'ide_presentation_mode',
     parameters: {
       type: Type.OBJECT,
-      description: 'Engage high-fidelity presentation protocol to show the current game state to the user in clean full-screen.',
-      properties: {
-        active: { type: Type.BOOLEAN }
-      },
+      description: 'Engage fullscreen presentation mode.',
+      properties: { active: { type: Type.BOOLEAN } },
       required: ['active']
-    }
-  },
-  {
-    name: 'ide_synthesis_request',
-    parameters: {
-      type: Type.OBJECT,
-      description: 'Synthesize cinematic or texture assets using Veo or ImageFX.',
-      properties: {
-        prompt: { type: Type.STRING },
-        modality: { type: Type.STRING, enum: ['image', 'video', 'audio_character'] },
-        aspectRatio: { type: Type.STRING, enum: ["1:1", "16:9", "9:16"] }
-      },
-      required: ['prompt', 'modality']
-    }
-  },
-  {
-    name: 'ide_world_grounding_info',
-    parameters: {
-      type: Type.OBJECT,
-      description: 'Fetch project-relevant geographic data concepts for immersive world design.',
-      properties: {
-        location: { type: Type.STRING },
-        detail: { type: Type.STRING, enum: ['topography', 'urban_layout', 'lighting_profile'] }
-      },
-      required: ['location']
     }
   }
 ];
 
+/**
+ * Live Audio Director Session
+ * Real-time voice interaction with AI
+ * GEMINI-ONLY - No Cloudflare equivalent
+ */
 export class LiveDirectorSession {
   private nextStartTime = 0;
   private inputAudioContext: AudioContext | null = null;
@@ -187,7 +130,7 @@ export class LiveDirectorSession {
             if (message.serverContent?.inputTranscription) onMessage(message.serverContent.inputTranscription.text, 'user');
             if (message.serverContent?.outputTranscription) onMessage(message.serverContent.outputTranscription.text, 'model');
             if (message.serverContent?.interrupted) {
-              this.sources.forEach(s => { try { s.stop(); } catch(e) {} });
+              this.sources.forEach(s => { try { s.stop(); } catch (e) { } });
               this.sources.clear();
               this.nextStartTime = 0;
             }
@@ -198,7 +141,7 @@ export class LiveDirectorSession {
           tools: [{ functionDeclarations: ideTools }],
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } },
-          systemInstruction: "You are the Antigravity Director. A high-level engine architect. Be authoritative, efficient, and precise. You have direct access to IDE tools to mutate and test the game world.",
+          systemInstruction: "You are the Antigravity Director. A high-level engine architect. Be authoritative, efficient, and precise.",
           inputAudioTranscription: {},
           outputAudioTranscription: {},
         },
@@ -212,70 +155,10 @@ export class LiveDirectorSession {
   close() { if (this.session) this.session.close(); }
 }
 
-export const runOrchestration = async (prompt: string, history: Message[], context: string, engineState: string, userPrefs: UserPreferences, version: string) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: ModelKey.COMMANDER,
-      contents: [{ role: 'user', parts: [{ text: `Directive: "${prompt}"\nVersion: ${version}\n[PROJECT_TREE]: ${context}\n[ENGINE_STATE]: ${engineState}\n[USER_MEM]: ${JSON.stringify(userPrefs)}` }] }],
-      config: {
-        systemInstruction: `You are the Antigravity Engine Architect. Master of solo game creation. Goal: Zero friction. Execute multi-step synthesis (Symphony logic).
-
-        If you need to update files or test, call the tools. You can call multiple tools in one turn.
-        If a test fails, you must attempt to fix the binary source.
-        Once the build is complete and tested, use ide_presentation_mode to show the result.`,
-        tools: [{ functionDeclarations: ideTools }],
-        thinkingConfig: { thinkingBudget: 1024 }, // Reduced from 32k to 1024 to prevent 429 quota exhaustion while keeping basic reasoning
-      },
-    });
-    limiter.addUsage(response.usageMetadata?.totalTokenCount || 5000);
-    return response;
-  } catch (error) {
-    console.error("[GEMINI] Orchestration Failure:", error);
-    // If we hit quota, try to fail gracefully or signal the UI
-    if (String(error).includes('429')) {
-       return { 
-         text: "Director Core is currently rebooting due to high neural load (Quota Exhausted). Please wait 60s and try a smaller directive.",
-         functionCalls: []
-       } as any;
-    }
-    throw error;
-  }
-};
-
-export const runProjectManagerReview = async (files: FileNode[], sceneObjects: SceneObject[], tasks: TodoTask[]) => {
-  try {
-    const aiLocal = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    const response = await aiLocal.models.generateContent({
-      model: ModelKey.LITE,
-      contents: `Analyze current project state for potential improvements or bottlenecks.
-      Files: ${JSON.stringify(files.map(f => f.path))}
-      Scene entities: ${sceneObjects.length}
-      Current backlog size: ${tasks.length} tasks`,
-      config: {
-        systemInstruction: "You are the Symphony PM. Analyze project state and provide a JSON array of 3 actionable tasks to improve the project. Each task must have: 'text', 'justification', 'category' (code/asset/gameplay/optimization/vfx), and 'priority' (low/medium/high).",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              text: { type: Type.STRING },
-              justification: { type: Type.STRING },
-              category: { type: Type.STRING },
-              priority: { type: Type.STRING }
-            },
-            required: ["text", "justification", "category", "priority"]
-          }
-        }
-      }
-    });
-    return JSON.parse(response.text || "[]");
-  } catch (error) {
-    console.error("[GEMINI] PM Review Failed:", error);
-    return [];
-  }
-};
-
+/**
+ * Generate Cinematic Video via VEO
+ * GEMINI-ONLY - No Cloudflare equivalent
+ */
 export const generateCinematic = async (prompt: string) => {
   try {
     if (!(await (window as any).aistudio.hasSelectedApiKey())) await (window as any).aistudio.openSelectKey();
@@ -296,47 +179,10 @@ export const generateCinematic = async (prompt: string) => {
   }
 };
 
-export const generateAsset = async (prompt: string, aspectRatio: "1:1" | "16:9" | "9:16") => {
-  try {
-    const response = await ai.models.generateContent({
-      model: ModelKey.ARTIST,
-      contents: { parts: [{ text: prompt }] },
-      config: { imageConfig: { aspectRatio } }
-    });
-    const part = response.candidates[0].content.parts.find(p => p.inlineData);
-    return part ? `data:image/png;base64,${part.inlineData.data}` : null;
-  } catch (error) {
-    console.error("[IMAGEFX] Asset Synthesis Failed:", error);
-    return null;
-  }
-};
-
-export const getCodeCompletions = async (prefix: string, suffix: string, filename: string): Promise<CodeCompletion[]> => {
-  try {
-    const response = await ai.models.generateContent({
-      model: ModelKey.LITE,
-      contents: `Filename: ${filename}\nPrefix: ${prefix}\nSuffix: ${suffix}`,
-      config: {
-        systemInstruction: "Antigravity Autocomplete. Pro game dev context. High-perf snippets only.",
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            completions: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: { text: { type: Type.STRING }, description: { type: Type.STRING } },
-                required: ["text"]
-              }
-            }
-          }
-        },
-      },
-    });
-    return JSON.parse(response.text || "{}").completions || [];
-  } catch (error) {
-    console.error("[LITE] Autocomplete Failed:", error);
-    return [];
-  }
-};
+// ============================================
+// MIGRATED TO CLOUDFLARE - See cloudflareService.ts
+// ============================================
+// - runOrchestration (text chat) --> cloudflareService.runOrchestration
+// - generateAsset (images) --> cloudflareService.generateAsset
+// - getCodeCompletions --> cloudflareService.getCodeCompletions
+// - runProjectManagerReview --> cloudflareService.runProjectManagerReview
