@@ -4,7 +4,7 @@
  */
 
 const BRIDGE_URL = 'https://neural-bridge-pages.pages.dev';
-const LOCAL_BRIDGE_URL = 'http://localhost:3040'; // Fallback for local dev
+const LOCAL_BRIDGE_URL = 'http://localhost:8788'; // Fallback for local dev
 
 export interface BridgeCommand {
   type: 'execute' | 'write_file' | 'read_file' | 'list_dir';
