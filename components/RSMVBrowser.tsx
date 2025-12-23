@@ -12,12 +12,14 @@ import * as THREE from 'three';
 // TYPES
 // =============================================================================
 
+export type GameSource = 'runescape' | 'morrowind' | 'fallout';
 export type ModelCategory = 'items' | 'npcs' | 'objects' | 'models' | 'animations';
 
 export interface RSMVModelEntry {
   id: number;
   name: string;
   category: ModelCategory;
+  gameSource: GameSource;
   thumbnailUrl?: string;
   vertexCount?: number;
   materialCount?: number;
@@ -25,49 +27,85 @@ export interface RSMVModelEntry {
   description?: string;
   tags?: string[];
   examine?: string;
+  filePath?: string; // For Morrowind/Fallout NIF files
 }
 
 export interface RSMVBrowserProps {
   onSelectModel?: (model: RSMVModelEntry) => void;
   onImportModel?: (model: RSMVModelEntry) => void;
   initialCategory?: ModelCategory;
+  initialGameSource?: GameSource;
 }
 
-// =============================================================================
-// MOCK DATA (Replace with RSMV cache loading in production)
-// =============================================================================
-
-const MOCK_MODELS: RSMVModelEntry[] = [
-  // Items
-  { id: 4151, name: 'Abyssal whip', category: 'items', vertexCount: 342, materialCount: 2, tags: ['weapon', 'melee', 'slayer'], examine: 'A weapon from the abyss.' },
-  { id: 11694, name: 'Armadyl godsword', category: 'items', vertexCount: 1024, materialCount: 3, tags: ['weapon', 'melee', 'godsword'], examine: 'A very powerful godsword.' },
-  { id: 1050, name: 'Santa hat', category: 'items', vertexCount: 128, materialCount: 1, tags: ['holiday', 'rare'], examine: 'Ho ho ho!' },
-  { id: 11286, name: 'Draconic visage', category: 'items', vertexCount: 512, materialCount: 2, tags: ['rare', 'dragon'], examine: 'This could be attached to an anti-dragon shield.' },
-  { id: 995, name: 'Coins', category: 'items', vertexCount: 64, materialCount: 1, tags: ['currency'], examine: 'Lovely money!' },
-  { id: 6585, name: 'Amulet of fury', category: 'items', vertexCount: 256, materialCount: 2, tags: ['jewelry', 'amulet'], examine: 'A dragonstone amulet with fury enchantment.' },
-  { id: 11832, name: 'Bandos chestplate', category: 'items', vertexCount: 768, materialCount: 3, tags: ['armor', 'melee', 'bandos'], examine: 'Bandos blessed this armor.' },
-  { id: 4708, name: 'Ahrim\'s hood', category: 'items', vertexCount: 384, materialCount: 2, tags: ['armor', 'magic', 'barrows'], examine: 'A magic hood from Barrows.' },
-
-  // NPCs
-  { id: 2881, name: 'Dagannoth Supreme', category: 'npcs', vertexCount: 2048, materialCount: 4, boneCount: 32, tags: ['boss', 'slayer'], description: 'The magic-based Dagannoth King.' },
-  { id: 494, name: 'King Black Dragon', category: 'npcs', vertexCount: 4096, materialCount: 6, boneCount: 48, tags: ['boss', 'dragon'], description: 'A fearsome three-headed dragon.' },
-  { id: 2042, name: 'Zulrah', category: 'npcs', vertexCount: 3072, materialCount: 5, boneCount: 24, tags: ['boss', 'snake'], description: 'The solo boss snake.' },
-  { id: 3127, name: 'TzTok-Jad', category: 'npcs', vertexCount: 5120, materialCount: 8, boneCount: 56, tags: ['boss', 'tzhaar'], description: 'The fire cape guardian.' },
-  { id: 319, name: 'Corporeal Beast', category: 'npcs', vertexCount: 6144, materialCount: 10, boneCount: 64, tags: ['boss', 'spirit'], description: 'A powerful spirit beast.' },
-  { id: 2215, name: 'General Graardor', category: 'npcs', vertexCount: 2560, materialCount: 5, boneCount: 40, tags: ['boss', 'bandos', 'gwd'], description: 'The Bandos general.' },
-
-  // Objects
-  { id: 10063, name: 'Crystal tree', category: 'objects', vertexCount: 1536, materialCount: 3, tags: ['woodcutting', 'crystal'], description: 'A magical crystalline tree.' },
-  { id: 11744, name: 'Bank booth', category: 'objects', vertexCount: 512, materialCount: 2, tags: ['banking', 'furniture'], description: 'Access your bank here.' },
-  { id: 2883, name: 'Altar', category: 'objects', vertexCount: 384, materialCount: 2, tags: ['prayer', 'church'], description: 'An altar for recharging prayer.' },
-  { id: 11758, name: 'Grand Exchange booth', category: 'objects', vertexCount: 768, materialCount: 3, tags: ['trading', 'ge'], description: 'Buy and sell items here.' },
-  { id: 8389, name: 'Portal', category: 'objects', vertexCount: 256, materialCount: 2, tags: ['teleport', 'magic'], description: 'A magical portal.' },
-
-  // Raw Models
-  { id: 1000, name: 'Model 1000', category: 'models', vertexCount: 256, materialCount: 1, tags: ['raw'] },
-  { id: 2500, name: 'Model 2500', category: 'models', vertexCount: 512, materialCount: 2, tags: ['raw'] },
-  { id: 5000, name: 'Model 5000', category: 'models', vertexCount: 1024, materialCount: 3, tags: ['raw'] },
+const GAME_SOURCES: { key: GameSource; label: string; icon: string; count: string; color: string }[] = [
+  { key: 'runescape', label: 'RuneScape', icon: '⚔️', count: '~50,000', color: 'cyan' },
+  { key: 'morrowind', label: 'Morrowind', icon: '🌋', count: '~5,000', color: 'amber' },
+  { key: 'fallout', label: 'Fallout NV', icon: '☢️', count: '~10,000', color: 'emerald' },
 ];
+
+// =============================================================================
+// MOCK DATA BY GAME SOURCE
+// =============================================================================
+
+const RUNESCAPE_MODELS: RSMVModelEntry[] = [
+  // Items
+  { id: 4151, name: 'Abyssal whip', category: 'items', gameSource: 'runescape', vertexCount: 342, materialCount: 2, tags: ['weapon', 'melee', 'slayer'], examine: 'A weapon from the abyss.' },
+  { id: 11694, name: 'Armadyl godsword', category: 'items', gameSource: 'runescape', vertexCount: 1024, materialCount: 3, tags: ['weapon', 'melee', 'godsword'], examine: 'A very powerful godsword.' },
+  { id: 1050, name: 'Santa hat', category: 'items', gameSource: 'runescape', vertexCount: 128, materialCount: 1, tags: ['holiday', 'rare'], examine: 'Ho ho ho!' },
+  { id: 11286, name: 'Draconic visage', category: 'items', gameSource: 'runescape', vertexCount: 512, materialCount: 2, tags: ['rare', 'dragon'], examine: 'This could be attached to an anti-dragon shield.' },
+  { id: 995, name: 'Coins', category: 'items', gameSource: 'runescape', vertexCount: 64, materialCount: 1, tags: ['currency'], examine: 'Lovely money!' },
+  { id: 6585, name: 'Amulet of fury', category: 'items', gameSource: 'runescape', vertexCount: 256, materialCount: 2, tags: ['jewelry', 'amulet'], examine: 'A dragonstone amulet.' },
+  { id: 11832, name: 'Bandos chestplate', category: 'items', gameSource: 'runescape', vertexCount: 768, materialCount: 3, tags: ['armor', 'melee', 'bandos'], examine: 'Bandos blessed this armor.' },
+  { id: 4708, name: 'Ahrim\'s hood', category: 'items', gameSource: 'runescape', vertexCount: 384, materialCount: 2, tags: ['armor', 'magic', 'barrows'], examine: 'A magic hood from Barrows.' },
+  // NPCs
+  { id: 2881, name: 'Dagannoth Supreme', category: 'npcs', gameSource: 'runescape', vertexCount: 2048, materialCount: 4, boneCount: 32, tags: ['boss', 'slayer'], description: 'The magic-based Dagannoth King.' },
+  { id: 494, name: 'King Black Dragon', category: 'npcs', gameSource: 'runescape', vertexCount: 4096, materialCount: 6, boneCount: 48, tags: ['boss', 'dragon'], description: 'A fearsome three-headed dragon.' },
+  { id: 2042, name: 'Zulrah', category: 'npcs', gameSource: 'runescape', vertexCount: 3072, materialCount: 5, boneCount: 24, tags: ['boss', 'snake'], description: 'The solo boss snake.' },
+  { id: 3127, name: 'TzTok-Jad', category: 'npcs', gameSource: 'runescape', vertexCount: 5120, materialCount: 8, boneCount: 56, tags: ['boss', 'tzhaar'], description: 'The fire cape guardian.' },
+  // Objects
+  { id: 10063, name: 'Crystal tree', category: 'objects', gameSource: 'runescape', vertexCount: 1536, materialCount: 3, tags: ['woodcutting', 'crystal'], description: 'A magical crystalline tree.' },
+  { id: 11744, name: 'Bank booth', category: 'objects', gameSource: 'runescape', vertexCount: 512, materialCount: 2, tags: ['banking', 'furniture'], description: 'Access your bank here.' },
+  // Raw Models
+  { id: 1000, name: 'Model 1000', category: 'models', gameSource: 'runescape', vertexCount: 256, materialCount: 1, tags: ['raw'] },
+  { id: 2500, name: 'Model 2500', category: 'models', gameSource: 'runescape', vertexCount: 512, materialCount: 2, tags: ['raw'] },
+];
+
+const MORROWIND_MODELS: RSMVModelEntry[] = [
+  // Characters
+  { id: 1, name: 'Frost Atronach', category: 'npcs', gameSource: 'morrowind', vertexCount: 3200, materialCount: 4, boneCount: 24, tags: ['daedra', 'summon'], filePath: 'Meshes/Atronach_Frost.nif' },
+  { id: 2, name: 'Dancing Girl', category: 'npcs', gameSource: 'morrowind', vertexCount: 1800, materialCount: 3, boneCount: 42, tags: ['npc', 'animation'], filePath: 'Meshes/anim_dancingGirl.nif' },
+  { id: 3, name: 'Spriggan Summon', category: 'npcs', gameSource: 'morrowind', vertexCount: 2400, materialCount: 3, boneCount: 18, tags: ['creature', 'nature'], filePath: 'Meshes/spriggan_summon.NIF' },
+  { id: 4, name: 'Werewolf Morph', category: 'npcs', gameSource: 'morrowind', vertexCount: 1200, materialCount: 2, boneCount: 32, tags: ['creature', 'bloodmoon'], filePath: 'Meshes/were_morph.NIF' },
+  // Objects
+  { id: 101, name: 'Torch Fire', category: 'objects', gameSource: 'morrowind', vertexCount: 128, materialCount: 1, tags: ['light', 'fire'], filePath: 'Meshes/torchfire.nif' },
+  { id: 102, name: 'Shrine FX', category: 'objects', gameSource: 'morrowind', vertexCount: 512, materialCount: 2, tags: ['temple', 'effect'], filePath: 'Meshes/In_OM_shrineFX.NIF' },
+  { id: 103, name: 'Blizzard', category: 'objects', gameSource: 'morrowind', vertexCount: 2048, materialCount: 3, tags: ['weather', 'bloodmoon'], filePath: 'Meshes/Blizzard.NIF' },
+  { id: 104, name: 'Lava Steam', category: 'objects', gameSource: 'morrowind', vertexCount: 768, materialCount: 2, tags: ['environment', 'volcano'], filePath: 'Meshes/lavasteam.nif' },
+  // Items
+  { id: 201, name: 'Editor Marker', category: 'items', gameSource: 'morrowind', vertexCount: 64, materialCount: 1, tags: ['debug', 'editor'], filePath: 'Meshes/EditorMarker.nif' },
+  { id: 202, name: 'Blood Splat', category: 'items', gameSource: 'morrowind', vertexCount: 256, materialCount: 1, tags: ['effect', 'combat'], filePath: 'Meshes/BloodSplat.nif' },
+];
+
+const FALLOUT_MODELS: RSMVModelEntry[] = [
+  // Characters
+  { id: 1, name: 'Securitron', category: 'npcs', gameSource: 'fallout', vertexCount: 4500, materialCount: 6, boneCount: 28, tags: ['robot', 'vegas'], description: 'Mr. House\'s robotic army.' },
+  { id: 2, name: 'Deathclaw', category: 'npcs', gameSource: 'fallout', vertexCount: 6800, materialCount: 5, boneCount: 56, tags: ['creature', 'dangerous'], description: 'A terrifying mutant.' },
+  { id: 3, name: 'Cazador', category: 'npcs', gameSource: 'fallout', vertexCount: 2200, materialCount: 3, boneCount: 24, tags: ['creature', 'insect'], description: 'Giant mutated wasps.' },
+  { id: 4, name: 'Super Mutant', category: 'npcs', gameSource: 'fallout', vertexCount: 5200, materialCount: 4, boneCount: 48, tags: ['mutant', 'hostile'], description: 'FEV-mutated human.' },
+  // Items
+  { id: 101, name: 'Pip-Boy 3000', category: 'items', gameSource: 'fallout', vertexCount: 1800, materialCount: 4, tags: ['wrist', 'computer'], description: 'Your personal computer.' },
+  { id: 102, name: 'Nuka-Cola', category: 'items', gameSource: 'fallout', vertexCount: 256, materialCount: 2, tags: ['drink', 'consumable'], description: 'The refreshing taste of the post-apocalypse.' },
+  { id: 103, name: 'Laser Rifle', category: 'items', gameSource: 'fallout', vertexCount: 1200, materialCount: 3, tags: ['weapon', 'energy'], description: 'A powerful energy weapon.' },
+  // Objects
+  { id: 201, name: 'Lucky 38', category: 'objects', gameSource: 'fallout', vertexCount: 12000, materialCount: 8, tags: ['building', 'vegas'], description: 'Mr. House\'s casino tower.' },
+  { id: 202, name: 'Radiation Barrel', category: 'objects', gameSource: 'fallout', vertexCount: 384, materialCount: 2, tags: ['hazard', 'container'], description: 'Glowing radioactive waste.' },
+];
+
+const ALL_MODELS: Record<GameSource, RSMVModelEntry[]> = {
+  runescape: RUNESCAPE_MODELS,
+  morrowind: MORROWIND_MODELS,
+  fallout: FALLOUT_MODELS,
+};
 
 // =============================================================================
 // 3D PREVIEW COMPONENT
@@ -135,14 +173,19 @@ const ModelPreview: React.FC<{ model: RSMVModelEntry | null }> = ({ model }) => 
 const RSMVBrowser: React.FC<RSMVBrowserProps> = ({
   onSelectModel,
   onImportModel,
-  initialCategory = 'items'
+  initialCategory = 'items',
+  initialGameSource = 'runescape'
 }) => {
+  const [gameSource, setGameSource] = useState<GameSource>(initialGameSource);
   const [category, setCategory] = useState<ModelCategory>(initialCategory);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedModel, setSelectedModel] = useState<RSMVModelEntry | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [isLoading, setIsLoading] = useState(false);
-  const [models, setModels] = useState<RSMVModelEntry[]>(MOCK_MODELS);
+
+  // Get models for current game source
+  const models = useMemo(() => ALL_MODELS[gameSource] || [], [gameSource]);
+
 
   // Filter models
   const filteredModels = useMemo(() => {
@@ -176,14 +219,37 @@ const RSMVBrowser: React.FC<RSMVBrowserProps> = ({
 
   return (
     <div className="flex h-full bg-[#050a15] text-white">
-      {/* Sidebar - Categories & Search */}
+      {/* Sidebar - Game Sources, Categories & Search */}
       <div className="w-72 border-r border-cyan-900/30 flex flex-col">
         {/* Header */}
         <div className="p-4 border-b border-cyan-900/30 bg-gradient-to-r from-cyan-950/50 to-transparent">
           <h2 className="text-lg font-black uppercase tracking-widest text-cyan-400 flex items-center gap-2">
-            <span>🗃️</span> RSMV Browser
+            <span>🗃️</span> Model Browser
           </h2>
-          <p className="text-[9px] text-slate-500 uppercase tracking-wider mt-1">RuneScape Model Viewer</p>
+          <p className="text-[9px] text-slate-500 uppercase tracking-wider mt-1">Multi-Game Asset Library</p>
+        </div>
+
+        {/* Game Source Tabs */}
+        <div className="p-3 border-b border-cyan-900/30 bg-[#0a1222]/50">
+          <div className="flex gap-1">
+            {GAME_SOURCES.map(gs => (
+              <button
+                key={gs.key}
+                onClick={() => { setGameSource(gs.key); setSelectedModel(null); }}
+                className={`flex-1 flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${gameSource === gs.key
+                    ? `bg-${gs.color}-600 text-white shadow-lg`
+                    : 'bg-cyan-950/30 text-slate-500 hover:text-cyan-400 hover:bg-cyan-950/50'
+                  }`}
+                style={gameSource === gs.key ? {
+                  backgroundColor: gs.color === 'cyan' ? '#0891b2' : gs.color === 'amber' ? '#d97706' : '#059669'
+                } : {}}
+              >
+                <span className="text-lg">{gs.icon}</span>
+                <span className="text-[8px] font-bold uppercase tracking-wider">{gs.label}</span>
+                <span className="text-[7px] opacity-70">{gs.count}</span>
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Search */}
@@ -210,8 +276,8 @@ const RSMVBrowser: React.FC<RSMVBrowserProps> = ({
               key={cat.key}
               onClick={() => setCategory(cat.key)}
               className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all ${category === cat.key
-                  ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-500/20'
-                  : 'bg-cyan-950/30 text-slate-400 hover:bg-cyan-950/50 hover:text-cyan-400'
+                ? 'bg-cyan-600 text-white shadow-lg shadow-cyan-500/20'
+                : 'bg-cyan-950/30 text-slate-400 hover:bg-cyan-950/50 hover:text-cyan-400'
                 }`}
             >
               <span className="text-lg">{cat.icon}</span>
@@ -252,8 +318,8 @@ const RSMVBrowser: React.FC<RSMVBrowserProps> = ({
                   key={`${model.category}-${model.id}`}
                   onClick={() => handleSelectModel(model)}
                   className={`p-3 rounded-xl text-left transition-all border ${selectedModel?.id === model.id && selectedModel?.category === model.category
-                      ? 'border-cyan-500 bg-cyan-950/50 shadow-lg shadow-cyan-500/10'
-                      : 'border-cyan-900/30 bg-cyan-950/20 hover:border-cyan-700/50'
+                    ? 'border-cyan-500 bg-cyan-950/50 shadow-lg shadow-cyan-500/10'
+                    : 'border-cyan-900/30 bg-cyan-950/20 hover:border-cyan-700/50'
                     }`}
                 >
                   <div className="text-[9px] text-cyan-600 font-mono mb-1">#{model.id}</div>
@@ -268,8 +334,8 @@ const RSMVBrowser: React.FC<RSMVBrowserProps> = ({
                   key={`${model.category}-${model.id}`}
                   onClick={() => handleSelectModel(model)}
                   className={`w-full p-3 rounded-xl text-left transition-all flex items-center gap-3 border ${selectedModel?.id === model.id && selectedModel?.category === model.category
-                      ? 'border-cyan-500 bg-cyan-950/50'
-                      : 'border-transparent hover:bg-cyan-950/30'
+                    ? 'border-cyan-500 bg-cyan-950/50'
+                    : 'border-transparent hover:bg-cyan-950/30'
                     }`}
                 >
                   <div className="text-[9px] text-cyan-600 font-mono w-12">#{model.id}</div>
