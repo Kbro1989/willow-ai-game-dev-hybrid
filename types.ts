@@ -233,6 +233,15 @@ export interface CodeCompletion {
   description?: string;
 }
 
+export interface CodeIssue {
+  line: number;
+  column?: number;
+  message: string;
+  severity: 'error' | 'warning' | 'info';
+  codeSnippet?: string;
+  suggestedFix?: string;
+}
+
 export interface DiagnosticResult {
   id: string;
   name: string;

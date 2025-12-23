@@ -106,6 +106,58 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({
     }
   };
 
+  // Task Decomposition: Break complex prompts into micro-steps
+  const decomposeTask = (prompt: string): { steps: string[], tools: string[] } => {
+    const steps: string[] = [];
+    const tools: string[] = [];
+
+    // Intent detection patterns
+    if (/create|add|new|generate/i.test(prompt)) {
+      if (/file|script|component/i.test(prompt)) {
+        steps.push(`Analyze requested structure for new file`);
+        steps.push(`Generate file content with AI`);
+        steps.push(`Inject file into project tree`);
+        tools.push('ide_filesystem_mutation');
+      }
+      if (/object|entity|mesh|scene/i.test(prompt)) {
+        steps.push(`Define object properties from prompt`);
+        steps.push(`Add object to 3D scene`);
+        tools.push('ide_matrix_intervention');
+      }
+      if (/image|texture|asset/i.test(prompt)) {
+        steps.push(`Generate asset with AI (FLUX)`);
+        steps.push(`Import asset into registry`);
+        tools.push('ide_synthesis_request');
+      }
+    }
+
+    if (/test|verify|check/i.test(prompt)) {
+      steps.push(`Run test suite for validation`);
+      tools.push('ide_test_runtime');
+    }
+
+    if (/refactor|improve|optimize/i.test(prompt)) {
+      steps.push(`Analyze code for improvements`);
+      steps.push(`Apply refactoring suggestions`);
+      tools.push('ide_filesystem_mutation');
+    }
+
+    // Default fallback
+    if (steps.length === 0) {
+      steps.push(`Process user request with AI`);
+    }
+
+    return { steps, tools };
+  };
+
+  // User Preference Learning: Track approvals/rejections
+  const learnFromInteraction = (action: string, approved: boolean) => {
+    console.log(`[SYMPHONY] Learning: ${action} was ${approved ? 'approved' : 'rejected'}`);
+    // In a real implementation, this would update userPrefs.history
+    // and persist to storage for future sessions
+  };
+
+
   const handleSend = async (overrideText?: string, annotatedImage?: string) => {
     const userText = overrideText || input;
     if (!userText.trim() && !annotatedImage) return;
@@ -212,8 +264,8 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({
         {messages.map((m) => (
           <div key={m.id} className={`flex flex-col ${m.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-6 duration-500`}>
             <div className={`max-w-[85%] rounded-[3rem] p-10 shadow-2xl border ${m.role === 'user' ? 'bg-cyan-600 border-cyan-400/30 text-white rounded-tr-none' :
-                m.isError ? 'bg-rose-950/40 border-rose-500/30 text-rose-100 rounded-tl-none' :
-                  'bg-[#0a1222] border-cyan-900/40 text-cyan-50 rounded-tl-none'
+              m.isError ? 'bg-rose-950/40 border-rose-500/30 text-rose-100 rounded-tl-none' :
+                'bg-[#0a1222] border-cyan-900/40 text-cyan-50 rounded-tl-none'
               }`}>
               <div className="text-[15px] leading-relaxed prose prose-invert max-w-none whitespace-pre-wrap font-medium tracking-wide">
                 {m.content}

@@ -176,3 +176,62 @@ export const checkWorkerHealth = async () => {
     return { status: 'offline', models: 0, version: 'unknown' };
   }
 };
+
+/**
+ * AI Code Audit - Analyze code for potential issues
+ */
+export const auditCode = async (
+  code: string,
+  filename: string
+): Promise<import('../types').CodeIssue[]> => {
+  try {
+    const response = await fetch(`${WORKER_URL}/api/audit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, filename })
+    });
+
+    if (!response.ok) {
+      console.warn("[CLOUDFLARE] Audit failed, returning empty");
+      return [];
+    }
+
+    const data = await response.json() as any;
+    return data.issues || [];
+  } catch (error) {
+    console.error("[CLOUDFLARE] Audit Failed:", error);
+    return [];
+  }
+};
+
+/**
+ * AI Refactor Code - Suggest code improvements
+ */
+export const refactorCode = async (
+  code: string,
+  filename: string
+): Promise<{ original: string, modified: string, explanation: string } | null> => {
+  try {
+    const response = await fetch(`${WORKER_URL}/api/refactor`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, filename })
+    });
+
+    if (!response.ok) {
+      console.warn("[CLOUDFLARE] Refactor failed");
+      return null;
+    }
+
+    const data = await response.json() as any;
+    return {
+      original: code,
+      modified: data.refactoredCode || code,
+      explanation: data.explanation || 'No explanation provided.'
+    };
+  } catch (error) {
+    console.error("[CLOUDFLARE] Refactor Failed:", error);
+    return null;
+  }
+};
+
