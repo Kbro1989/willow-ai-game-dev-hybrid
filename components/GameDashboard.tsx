@@ -1,7 +1,7 @@
-
 import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
 import { OrbitControls, Sky, Environment, ContactShadows, PerspectiveCamera, Float, Stars, Grid, Gltf } from '@react-three/drei';
+import { XR, Controllers, Hands, createXRStore } from '@react-three/xr';
 import * as THREE from 'three';
 import {
   BuildInfo, GameAsset, SceneObject, PhysicsConfig, PipelineConfig,
@@ -49,6 +49,9 @@ interface GameDashboardProps {
   onClearSculpt: () => void;
   isFullscreen?: boolean;
 }
+
+// Create XR store for VR/AR sessions
+const xrStore = createXRStore();
 
 const LiveObject: React.FC<{ obj: SceneObject, isSelected: boolean, onSelect: () => void, isPlaying: boolean }> = ({ obj, isSelected, onSelect, isPlaying }) => {
   const meshRef = useRef<THREE.Group>(null);
@@ -428,6 +431,8 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
           )}
 
           <Suspense fallback={<div className="flex items-center justify-center h-full text-cyan-500 animate-pulse uppercase text-xs font-black tracking-widest">Waking Runtime Engine...</div>}>
+            <button onClick={() => xrStore.enterVR()} className="absolute top-4 left-4 z-50 px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-lg">Enter VR</button>
+            <button onClick={() => xrStore.enterAR()} className="absolute top-4 left-24 z-50 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-[9px] font-black uppercase tracking-widest transition-all shadow-lg">Enter AR</button>
             <Canvas
               shadows
               gl={{
@@ -437,30 +442,34 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
               }}
               dpr={[1, 2]}
             >
-              <PerspectiveCamera makeDefault position={[15, 15, 15]} fov={45} />
-              <OrbitControls makeDefault />
-              <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
-              <Sky sunPosition={[100, worldConfig.atmosphereDensity * 50, 100]} />
-              <Environment preset="night" />
-              <ambientLight intensity={0.5} />
-              <pointLight position={[10, 10, 10]} intensity={1} castShadow />
+              <XR store={xrStore}>
+                <Controllers />
+                <Hands />
+                <PerspectiveCamera makeDefault position={[15, 15, 15]} fov={45} />
+                <OrbitControls makeDefault />
+                <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
+                <Sky sunPosition={[100, worldConfig.atmosphereDensity * 50, 100]} />
+                <Environment preset="night" />
+                <ambientLight intensity={0.5} />
+                <pointLight position={[10, 10, 10]} intensity={1} castShadow />
 
-              {sceneObjects.map(obj => (
-                <LiveObject
-                  key={obj.id}
-                  obj={obj}
-                  isSelected={selectedObjectId === obj.id}
-                  onSelect={() => setSelectedObjectId(obj.id)}
-                  isPlaying={simulation.status === 'playing' || isFullscreen}
-                />
-              ))}
+                {sceneObjects.map(obj => (
+                  <LiveObject
+                    key={obj.id}
+                    obj={obj}
+                    isSelected={selectedObjectId === obj.id}
+                    onSelect={() => setSelectedObjectId(obj.id)}
+                    isPlaying={simulation.status === 'playing' || isFullscreen}
+                  />
+                ))}
 
-              {!isFullscreen && <Grid renderOrder={-1} position={[0, -0.01, 0]} infiniteGrid cellSize={1} sectionSize={5} sectionColor="#00f2ff" cellColor="#0a1222" fadeDistance={50} />}
+                {!isFullscreen && <Grid renderOrder={-1} position={[0, -0.01, 0]} infiniteGrid cellSize={1} sectionSize={5} sectionColor="#00f2ff" cellColor="#0a1222" fadeDistance={50} />}
 
-              <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
-                <planeGeometry args={[200, 200]} />
-                <meshStandardMaterial color="#0a1222" roughness={1} metalness={0.1} />
-              </mesh>
+                <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.05, 0]}>
+                  <planeGeometry args={[200, 200]} />
+                  <meshStandardMaterial color="#0a1222" roughness={1} metalness={0.1} />
+                </mesh>
+              </XR>
             </Canvas>
           </Suspense>
 
