@@ -235,3 +235,39 @@ export const refactorCode = async (
   }
 };
 
+/**
+ * AI Asset Optimization - Suggest mesh/texture optimizations
+ */
+export const optimizeAsset = async (
+  assetType: string,
+  polyCount?: number,
+  textureSize?: string,
+  lodLevels?: number
+): Promise<{
+  optimizations: Array<{ type: string; target?: number; format?: string; levels?: number[]; savings: string; description: string }>;
+  estimatedPerformanceGain: string;
+  priority: 'low' | 'medium' | 'high';
+} | null> => {
+  try {
+    const response = await fetch(`${WORKER_URL}/api/optimize-asset`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ assetType, polyCount, textureSize, lodLevels })
+    });
+
+    if (!response.ok) {
+      console.warn("[CLOUDFLARE] Asset optimization failed");
+      return null;
+    }
+
+    const data = await response.json() as any;
+    return {
+      optimizations: data.optimizations || [],
+      estimatedPerformanceGain: data.estimatedPerformanceGain || '0%',
+      priority: data.priority || 'low'
+    };
+  } catch (error) {
+    console.error("[CLOUDFLARE] Asset Optimization Failed:", error);
+    return null;
+  }
+};
