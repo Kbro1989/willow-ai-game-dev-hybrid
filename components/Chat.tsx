@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { Message, ProjectState, ModelKey, SprintPlan, GroundingChunk, UserPreferences, Extension, SceneObject, PhysicsConfig, WorldConfig, RenderConfig, CompositingConfig, SimulationState, EngineAction } from '../types';
-// Hybrid: Cloudflare for text/images, Gemini for live audio/video
-import { runOrchestration, generateAsset, cloudlareLimiter as limiter } from '../services/cloudflareService';
+// Hybrid: Cloudflare for text/images now through modelRouter, Gemini for live audio/video
 import { LiveDirectorSession, generateCinematic } from '../services/geminiService';
+import { modelRouter } from '../services/modelRouter';
+import { generateAsset, cloudlareLimiter as limiter } from '../services/cloudflareService';
 
 interface ChatProps {
   project: ProjectState;
@@ -186,35 +187,58 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({
           fps: 144
         });
 
-        // Run the model orchestration turn
-        const response = await runOrchestration(
-          currentPrompt,
-          messages,
-          context,
-          engineState,
-          userPrefs,
-          projectVersion
+        // Run the model orchestration turn with function calling via router
+        const systemPrompt = `You are the Antigravity Engine Architect. Master of solo game creation. Goal: Zero friction. Execute multi-step synthesis.
+
+You have access to IDE tools for file mutation, scene updates, and testing. Respond with structured JSON when tool calls are needed.`;
+
+        // Convert messages to router format (map assistant → model)
+        const history = messages.map(m => ({
+          role: m.role === 'assistant' ? 'model' as const : m.role === 'user' ? 'user' as const : 'user' as const,
+          content: m.content
+        })).filter(m => m.role === 'user' || m.role === 'model');
+
+        const fullPrompt = `Directive: "${currentPrompt}"\nVersion: ${projectVersion}\n[PROJECT_TREE]: ${context}\n[ENGINE_STATE]: ${engineState}\n[USER_MEM]: ${JSON.stringify(userPrefs)}`;
+
+        // Use modelRouter with function calling
+        const response = await modelRouter.chatWithFunctions(
+          fullPrompt,
+          [], // Function declarations if needed
+          history,
+          systemPrompt
         );
-        lastResponse = response;
+
+        // Track usage
+        limiter.addUsage(response.tokensUsed || 1000);
+
+        // Log which provider was used
+        console.log(`[ROUTER] Used ${response.provider} (${response.model}) - ${response.latency}ms`);
+
+        lastResponse = {
+          text: response.content || '',
+          functionCalls: response.functionCalls || [],
+          model: response.model,
+          latency: response.latency
+        };
 
         if (response.functionCalls && response.functionCalls.length > 0) {
           const toolResults = [];
-          for (const call of response.functionCalls) {
-            const result = await executeTool(call);
-            toolResults.push({ callId: call.id, name: call.name, response: result });
+          for (const fc of response.functionCalls) {
+            const toolOutput = await executeTool(fc); // Assuming executeTool is the correct function
+            toolResults.push(toolOutput);
 
             // Map results to engine actions for visual feedback in UI
-            if (call.name === 'ide_test_runtime') {
-              accumulatedActions.push({ type: 'RUN_TEST_SUITE', payload: result.telemetry });
+            if (fc.name === 'ide_test_runtime') {
+              accumulatedActions.push({ type: 'RUN_TEST_SUITE', payload: toolOutput.telemetry });
             } else {
-              accumulatedActions.push({ type: 'AI_EDITOR_REFACTOR', payload: { tool: call.name, result } });
+              accumulatedActions.push({ type: 'AI_EDITOR_REFACTOR', payload: { tool: fc.name, result: toolOutput } });
             }
           }
 
           // In a real Symphony, we would feed these toolResults back to the model
           // to continue the turn if needed. For this singleton implementation,
           // we treat the turn as complete if it returns text alongside tool calls.
-          if (!response.text) {
+          if (!response.content) {
             currentPrompt = `Tool results: ${JSON.stringify(toolResults)}. Finalize the build or suggest next steps.`;
             continue; // Go to next turn
           }

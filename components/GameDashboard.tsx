@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback, Suspense } from 'react';
 import { Canvas, useFrame, useThree, ThreeElements } from '@react-three/fiber';
 import { OrbitControls, Sky, Environment, ContactShadows, PerspectiveCamera, Float, Stars, Grid, Gltf } from '@react-three/drei';
-import { XR, Controllers, Hands, createXRStore } from '@react-three/xr';
+import { XR, createXRStore } from '@react-three/xr';
 import * as THREE from 'three';
 import {
   BuildInfo, GameAsset, SceneObject, PhysicsConfig, PipelineConfig,
@@ -50,6 +50,7 @@ interface GameDashboardProps {
   isFullscreen?: boolean;
 }
 
+// Create XR store for VR/AR sessions
 // Create XR store for VR/AR sessions
 const xrStore = createXRStore();
 
@@ -173,6 +174,7 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
 }) => {
   const [activeWorkspace, setActiveWorkspace] = useState<'layout' | 'shading' | 'world' | 'data' | 'rendering' | 'pipelines'>('layout');
   const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [ws, setWs] = useState<WebSocket | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
   const [telemetry, setTelemetry] = useState({ fps: 144, history: Array(30).fill(144) });
   const [localPipelines, setLocalPipelines] = useState(pipelines);
@@ -216,15 +218,27 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file && onAddAsset) {
+      // Create local URL for preview
       const url = URL.createObjectURL(file);
+
+      // Save to local filesystem via bridge
+      const { saveAssetToLocal } = await import('../services/bridgeService');
+      const result = await saveAssetToLocal(file.name, file);
+
+      if (result.success) {
+        console.log('[BRIDGE] Asset saved locally:', result.output);
+      } else {
+        console.warn('[BRIDGE] Failed to save locally, using blob URL:', result.error);
+      }
+
       const newAsset: GameAsset = {
         id: `imported-${Date.now()}`,
         name: file.name,
         type: 'mesh',
-        status: 'raw',
+        status: result.success ? 'optimized' : 'raw',
         url: url
       };
       onAddAsset(newAsset);
@@ -495,8 +509,7 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
               dpr={[1, 2]}
             >
               <XR store={xrStore}>
-                <Controllers />
-                <Hands />
+
                 <PerspectiveCamera makeDefault position={[15, 15, 15]} fov={45} />
                 <OrbitControls makeDefault />
                 <Stars radius={100} depth={50} count={5000} factor={4} saturation={0} fade speed={1} />
@@ -526,6 +539,35 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
           </Suspense>
 
           <div className={`absolute bottom-10 right-10 flex flex-col space-y-6 z-40 transition-opacity duration-500 ${isFullscreen ? 'opacity-30' : 'opacity-100'}`}>
+            {/* Bridge Connection Manager */}
+            <div className="bg-[#0a1222]/90 backdrop-blur-3xl p-6 rounded-[2rem] border border-cyan-500/20 shadow-2xl min-w-[360px] space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-[10px] font-black uppercase text-cyan-600 tracking-widest">Neural Link</span>
+                <div className="flex items-center space-x-2">
+                  <div className={`w-2 h-2 rounded-full ${ws?.readyState === 1 ? 'bg-emerald-500 shadow-[0_0_10px_#10b981]' : 'bg-red-500 animate-pulse'}`}></div>
+                  <span className="text-[9px] font-bold text-slate-400 uppercase">{ws?.readyState === 1 ? 'Connected' : 'Offline'}</span>
+                </div>
+              </div>
+              <input
+                className="w-full bg-[#050a15] border border-slate-700 focus:border-cyan-500 rounded-lg px-3 py-2 text-[10px] text-cyan-400 font-mono outline-none transition-colors placeholder:text-slate-700"
+                placeholder="Enter Tunnel URL (e.g., https://xyz.trycloudflare.com)"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const url = e.currentTarget.value;
+                    if (url) {
+                      // Dynamic Import to avoid SSR issues if any
+                      import('../services/cloudflareService').then(({ setBridgeUrl }) => {
+                        setBridgeUrl(url);
+                        // Force reconnect logic here if setup
+                        const newWs = new WebSocket(url.replace('http', 'ws'));
+                        newWs.onopen = () => setWs(newWs);
+                      });
+                    }
+                  }
+                }}
+              />
+            </div>
+
             <div className="bg-[#0a1222]/90 backdrop-blur-3xl p-8 rounded-[2.5rem] border border-cyan-500/20 shadow-2xl min-w-[360px]">
               <div className="flex justify-between items-end mb-8">
                 <div className="flex flex-col">

@@ -1,0 +1,7 @@
+
+// Pick of Gods Authentication Credentials
+export const PICK_OF_GODS_CONFIG = {
+  PROJECT_ID: '13f19b79-d6e2-49b2-b26a-630243051890',
+  API_SECRET_HASH: '4166e2a0488ae84843a78a96830974d8e36be2a760ee9315965943554a19b816ed13', // SHA-256
+  PROJECT_NAME: 'Pick of Gods'
+};

@@ -8,6 +8,14 @@ import { Message, CodeCompletion, UserPreferences, FileNode, TodoTask, SceneObje
 // Configure worker URL - uses deployed ai-game-studio worker
 const WORKER_URL = 'https://ai-game-studio.kristain33rs.workers.dev';
 
+// Bridge Configuration (defaults to local, can be overridden by user settings in tunnel mode)
+let BRIDGE_URL = 'http://localhost:3040';
+
+export const setBridgeUrl = (url: string) => {
+  BRIDGE_URL = url;
+  console.log(`[BRIDGE] URL updated to: ${BRIDGE_URL}`);
+};
+
 // Simple rate limiter for UI metrics display
 class CloudflareRateLimiter {
   private usedTokens: number = 0;

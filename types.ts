@@ -273,6 +273,7 @@ export interface Workspace {
   stagedFiles: string[];
   commitHistory: GitCommit[];
   sculptHistory: SculptPoint[];
+  savedPipelines?: any[]; // Workflow[] from n8n
 }
 
 export enum ModelKey {

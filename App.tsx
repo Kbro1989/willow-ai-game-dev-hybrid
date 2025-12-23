@@ -13,6 +13,7 @@ import Terminal from './components/Terminal';
 import Chat, { ChatHandle } from './components/Chat';
 import GameDashboard from './components/GameDashboard';
 import DiagnosticsPanel from './components/DiagnosticsPanel';
+import ApiKeyManager from './components/ApiKeyManager';
 import { initialFiles } from './constants';
 import { cloudlareLimiter as limiter } from './services/cloudflareService';
 
@@ -48,6 +49,7 @@ const App: React.FC = () => {
   const [simulation, setSimulation] = useState<SimulationState>({ status: 'playing', time: 0, activeBehaviors: [] });
   const [sceneObjects, setSceneObjects] = useState<SceneObject[]>([]);
   const [physics, setPhysics] = useState<PhysicsConfig>({ gravity: -9.81, friction: 0.6, atmosphere: 'normal', timeScale: 1.0 });
+  const [showApiKeyManager, setShowApiKeyManager] = useState(false);
   const [worldConfig, setWorldConfig] = useState<WorldConfig>({ seed: 999, terrainScale: 1.0, biome: 'cyber', vegetationDensity: 0.8, waterLevel: 0.1, atmosphereDensity: 0.2, brushSize: 20.0, brushStrength: 0.7, activeTool: 'none' });
   const [renderConfig, setRenderConfig] = useState<RenderConfig>({ engine: 'WebGPU', resolution: '4K', samples: 128, denoising: true, shadowMapRes: 2048 });
   const [compositingConfig, setCompositingConfig] = useState<CompositingConfig>({ bloom: 2.0, exposure: 1.2, vignette: 0.6, chromaticAberration: 0.15, tonemapping: 'ACES' });
@@ -345,7 +347,7 @@ const App: React.FC = () => {
   const showDashboard = bottomPanel === 'dashboard' || isPresenting;
   const dashboardStyle: React.CSSProperties = isPresenting
     ? { position: 'fixed', inset: 0, zIndex: 50, width: '100vw', height: '100vh' }
-    : { position: 'absolute', bottom: 0, right: 0, left: `${sidebarWidth}px`, height: `${bottomHeight}px`, zIndex: 10 };
+    : { position: 'absolute', bottom: 0, right: 0, left: `${sidebarWidth}px`, height: `${bottomHeight}px`, zIndex: 5 };
 
   return (
     <div className={`flex h-screen w-full bg-[#050a15] text-white/90 overflow-hidden font-sans select-none transition-all duration-700 ${isPresenting ? 'presentation-active' : ''}`}>
@@ -370,39 +372,52 @@ const App: React.FC = () => {
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {!isPresenting && (
-          <header className="h-16 border-b border-cyan-900/30 flex items-center justify-between px-10 bg-[#0a1222]/80 z-10 shrink-0 shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-3xl transition-all duration-500">
-            <div className="flex items-center space-x-12">
-              <div className="relative">
+          <header className="h-20 bg-[#0a1222] border-b border-cyan-900/30 flex items-center justify-between px-10 shrink-0 z-20 shadow-[0_10px_50px_rgba(0,0,0,0.5)]">
+            <div className="flex items-center space-x-6">
+              <div>
+                <h1 className="text-2xl font-black uppercase tracking-[0.3em] text-cyan-50" style={{ textShadow: '0 0 20px rgba(0,242,255,0.5)' }}>Willow Symphony</h1>
+                <p className="text-[9px] uppercase tracking-[0.3em] text-slate-600 mt-0.5">Neural Game Director</p>
+              </div>
+              <div className="h-12 w-px bg-cyan-900/40" />
+              <div className="flex items-center space-x-3">
+                <div className="flex items-center space-x-2 bg-emerald-500/10 px-4 py-2 rounded-full border border-emerald-500/20">
+                  <div className="w-3 h-3 rounded-full bg-cyan-500 shadow-[0_0_15px_#00f2ff] animate-pulse"></div>
+                  <span className="text-[10px] font-black uppercase text-emerald-400 tracking-widest">Agent Active</span>
+                </div>
+                {/* API Key Manager Button */}
                 <button
-                  onClick={() => setIsWorkspaceSwitcherOpen(!isWorkspaceSwitcherOpen)}
-                  className="flex items-center space-x-6 bg-[#0a1222] px-6 py-2 rounded-2xl border border-cyan-500/20 hover:border-cyan-400 transition-all group shadow-[0_0_15px_rgba(0,242,255,0.1)]"
+                  onClick={() => setShowApiKeyManager(true)}
+                  className="p-2 bg-slate-800/50 hover:bg-cyan-600/20 border border-slate-700 hover:border-cyan-500/50 rounded-lg transition-all group"
+                  title="API Key Manager"
                 >
-                  <div className="w-10 h-10 bg-cyan-600 rounded-xl flex items-center justify-center relative shadow-[0_0_20px_#00f2ff]">
-                    <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg>
-                  </div>
-                  <div className="flex flex-col items-start">
-                    <span className="text-[13px] font-black uppercase tracking-widest text-cyan-50">{workspaces.find(ws => ws.id === activeWorkspaceId)?.name || 'Loading...'}</span>
-                    <span className="text-[8px] font-black text-cyan-400 uppercase tracking-widest opacity-80 flex items-center">v{projectVersion} Master Protocol</span>
-                  </div>
+                  <svg className="w-5 h-5 text-slate-400 group-hover:text-cyan-400 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                  </svg>
                 </button>
               </div>
             </div>
-            <div className="flex items-center space-x-12">
-              <div className="hidden xl:flex flex-col items-end">
-                <div className="flex items-center space-x-3 mb-1">
-                  <span className="text-[9px] font-black uppercase text-slate-500 tracking-widest">Neural Link</span>
-                  <button onClick={() => setIsOverwatchActive(!isOverwatchActive)} className={`w-8 h-4 rounded-full transition-colors relative ${isOverwatchActive ? 'bg-cyan-600 shadow-[0_0_10px_#00f2ff]' : 'bg-slate-800'}`}>
-                    <div className={`absolute top-0.5 w-3 h-3 rounded-full bg-white transition-all ${isOverwatchActive ? 'left-4.5' : 'left-0.5'}`}></div>
-                  </button>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <span className="text-[10px] text-cyan-400 font-black uppercase tracking-tighter">Flux Sync: Optimized</span>
-                  <div className="w-3 h-3 rounded-full bg-cyan-500 shadow-[0_0_15px_#00f2ff] animate-pulse"></div>
+            <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-[11px]">
+                <span className="text-slate-600 uppercase tracking-widest font-black">v{projectVersion}</span>
+                <div className={`w-2 h-2 rounded-full ${buildInfo.status === 'building' ? 'bg-yellow-500 animate-pulse' : buildInfo.status === 'success' ? 'bg-emerald-500' : buildInfo.status === 'error' ? 'bg-red-500' : 'bg-slate-600'}`}></div>
+              </div>
+              <div className="h-12 w-px bg-cyan-900/40" />
+              <div className="flex items-center space-x-3">
+                <div className="flex flex-col items-end">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-[9px] uppercase tracking-widest text-slate-600 font-black">Diagnostic</span>
+                    <div className="w-3 h-3 rounded-full bg-cyan-500 shadow-[0_0_15px_#00f2ff] animate-pulse"></div>
+                  </div>
                 </div>
               </div>
               <button onClick={() => handleBuild()} className="relative overflow-hidden group px-12 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-2xl text-[13px] font-black uppercase tracking-widest transition-all shadow-[0_0_20px_rgba(0,242,255,0.4)]">Push & Hot-Swap</button>
             </div>
           </header>
+        )}
+
+        {/* API Key Manager Modal */}
+        {showApiKeyManager && (
+          <ApiKeyManager onClose={() => setShowApiKeyManager(false)} />
         )}
 
         <div className={`flex-1 relative overflow-hidden bg-[#050a15] ${isPresenting ? 'isPresenting' : ''}`}>

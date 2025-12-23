@@ -7,7 +7,8 @@
 import { GoogleGenAI, Modality, LiveServerMessage, FunctionDeclaration, Type } from "@google/genai";
 import { ModelKey } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+// Removed global auto-init to prevent crash on load
+// const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
 // Base-64 helpers for Live API
 function encode(bytes: Uint8Array) {
@@ -94,7 +95,7 @@ export class LiveDirectorSession {
 
   async connect(onMessage: (msg: string, role: 'user' | 'model') => void) {
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
       this.inputAudioContext = new AudioContext({ sampleRate: 16000 });
       this.outputAudioContext = new AudioContext({ sampleRate: 24000 });
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -162,7 +163,7 @@ export class LiveDirectorSession {
 export const generateCinematic = async (prompt: string) => {
   try {
     if (!(await (window as any).aistudio.hasSelectedApiKey())) await (window as any).aistudio.openSelectKey();
-    const aiLocal = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const aiLocal = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
     let operation = await aiLocal.models.generateVideos({
       model: ModelKey.VEO,
       prompt,
@@ -172,7 +173,7 @@ export const generateCinematic = async (prompt: string) => {
       await new Promise(r => setTimeout(r, 10000));
       operation = await aiLocal.operations.getVideosOperation({ operation });
     }
-    return `${operation.response?.generatedVideos?.[0]?.video?.uri}&key=${process.env.API_KEY}`;
+    return `${operation.response?.generatedVideos?.[0]?.video?.uri}&key=${import.meta.env.VITE_GEMINI_API_KEY}`;
   } catch (error) {
     console.error("[VEO] Cinematic Synthesis Failed:", error);
     throw error;
