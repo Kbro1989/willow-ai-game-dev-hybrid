@@ -271,3 +271,77 @@ export const optimizeAsset = async (
     return null;
   }
 };
+
+/**
+ * Semantic Asset Search - Search assets using vector embeddings
+ * Uses AI to find similar assets based on semantic meaning
+ */
+export const searchSimilarAssets = async (
+  query: string,
+  limit: number = 10
+): Promise<{
+  results: Array<{ id: string; name: string; score: number; type: string }>;
+  searchVector?: number[];
+} | null> => {
+  try {
+    // First, generate embedding for the query
+    const embeddingResponse = await fetch(`${WORKER_URL}/api/embed`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: query })
+    });
+
+    if (!embeddingResponse.ok) {
+      // Fallback: use text-based search through chat API
+      const fallbackResponse = await fetch(`${WORKER_URL}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: `Search for game assets matching: "${query}". Return ONLY a JSON array of results: [{"id": "...", "name": "...", "score": 0.9, "type": "mesh|texture|audio"}]`,
+          model: 'QWEN_TURBO'
+        })
+      });
+
+      if (!fallbackResponse.ok) {
+        return null;
+      }
+
+      const data = await fallbackResponse.json() as any;
+      try {
+        const jsonMatch = data.response?.match(/\[[\s\S]*\]/);
+        if (jsonMatch) {
+          return { results: JSON.parse(jsonMatch[0]) };
+        }
+      } catch (e) {
+        // Return empty results
+      }
+      return { results: [] };
+    }
+
+    const embedData = await embeddingResponse.json() as any;
+
+    // Search vector database with embedding
+    const searchResponse = await fetch(`${WORKER_URL}/api/vector-search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vector: embedData.embedding,
+        limit,
+        namespace: 'game-assets'
+      })
+    });
+
+    if (!searchResponse.ok) {
+      return { results: [], searchVector: embedData.embedding };
+    }
+
+    const searchData = await searchResponse.json() as any;
+    return {
+      results: searchData.results || [],
+      searchVector: embedData.embedding
+    };
+  } catch (error) {
+    console.error("[CLOUDFLARE] Semantic Search Failed:", error);
+    return null;
+  }
+};

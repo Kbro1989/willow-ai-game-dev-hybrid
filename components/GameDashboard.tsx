@@ -276,7 +276,41 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
       case 'world':
         return (
           <div className="p-6 space-y-8 overflow-y-auto no-scrollbar h-full">
-            <h4 className="text-[10px] font-black uppercase tracking-widest text-cyan-400 border-b border-white/5 pb-2">World Simulation</h4>
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-cyan-400 border-b border-white/5 pb-2">Procedural Generation</h4>
+            <div className="space-y-4">
+              <div>
+                <label className="text-[9px] font-black uppercase text-slate-500 block mb-2">World Seed</label>
+                <div className="flex space-x-2">
+                  <input type="number" value={worldConfig.seed} onChange={(e) => onUpdateWorld({ seed: parseInt(e.target.value) || 0 })} className="flex-1 bg-[#050a15] border border-cyan-900/40 rounded-xl p-3 text-center text-xs font-mono text-cyan-400 outline-none focus:border-cyan-500" />
+                  <button onClick={() => onUpdateWorld({ seed: Math.floor(Math.random() * 999999) })} className="px-4 bg-cyan-600/20 hover:bg-cyan-600 text-cyan-400 hover:text-white rounded-xl text-[9px] font-black uppercase transition-all">Random</button>
+                </div>
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase text-slate-500 block mb-2">Biome</label>
+                <select value={worldConfig.biome} onChange={(e) => onUpdateWorld({ biome: e.target.value as any })} className="w-full bg-[#050a15] border border-cyan-900/40 rounded-xl p-3 text-xs text-cyan-400 outline-none">
+                  <option value="temperate">🌲 Temperate Forest</option>
+                  <option value="arid">🏜️ Arid Desert</option>
+                  <option value="arctic">❄️ Arctic Tundra</option>
+                  <option value="volcanic">🌋 Volcanic</option>
+                  <option value="cyber">🌆 Cyberpunk</option>
+                  <option value="urban">🏙️ Urban</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase text-slate-500 block mb-2">Terrain Complexity <span className="text-cyan-600">{Math.round(worldConfig.terrainScale * 10)}/10</span></label>
+                <input type="range" min="0.1" max="1" step="0.1" value={worldConfig.terrainScale} onChange={(e) => onUpdateWorld({ terrainScale: parseFloat(e.target.value) })} className="w-full accent-cyan-500" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase text-slate-500 block mb-2">Vegetation Density <span className="text-emerald-500">{Math.round(worldConfig.vegetationDensity * 100)}%</span></label>
+                <input type="range" min="0" max="1" step="0.05" value={worldConfig.vegetationDensity} onChange={(e) => onUpdateWorld({ vegetationDensity: parseFloat(e.target.value) })} className="w-full accent-emerald-500" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase text-slate-500 block mb-2">Water Level <span className="text-blue-400">{Math.round(worldConfig.waterLevel * 100)}%</span></label>
+                <input type="range" min="0" max="1" step="0.05" value={worldConfig.waterLevel} onChange={(e) => onUpdateWorld({ waterLevel: parseFloat(e.target.value) })} className="w-full accent-blue-500" />
+              </div>
+            </div>
+
+            <h4 className="text-[10px] font-black uppercase tracking-widest text-cyan-400 border-b border-white/5 pb-2 pt-4">Environment</h4>
             <div className="space-y-4">
               <div>
                 <label className="text-[9px] font-black uppercase text-slate-500 block mb-2">Atmosphere Density</label>
@@ -291,12 +325,30 @@ const GameDashboard: React.FC<GameDashboardProps> = ({
                 <input type="number" value={physics.gravity} onChange={(e) => onUpdatePhysics({ gravity: parseFloat(e.target.value) })} className="w-full bg-[#050a15] border border-cyan-900/40 rounded-xl p-3 text-center text-xs font-mono text-cyan-400 outline-none focus:border-cyan-500" />
               </div>
             </div>
+
             <h4 className="text-[10px] font-black uppercase tracking-widest text-cyan-400 border-b border-white/5 pb-2 pt-4">Terrain Sculpting</h4>
             <div className="grid grid-cols-3 gap-2">
               {['raise', 'lower', 'smooth'].map(tool => (
                 <button key={tool} onClick={() => onUpdateWorld({ activeTool: tool as any })} className={`py-2 rounded-xl text-[9px] font-black uppercase ${worldConfig.activeTool === tool ? 'bg-cyan-600 text-white' : 'bg-cyan-900/20 text-slate-500'}`}>{tool}</button>
               ))}
             </div>
+            <div className="grid grid-cols-2 gap-3 mt-4">
+              <div>
+                <label className="text-[9px] font-black uppercase text-slate-500 block mb-2">Brush Size</label>
+                <input type="range" min="1" max="10" step="1" value={worldConfig.brushSize} onChange={(e) => onUpdateWorld({ brushSize: parseInt(e.target.value) })} className="w-full accent-cyan-500" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black uppercase text-slate-500 block mb-2">Brush Strength</label>
+                <input type="range" min="0.1" max="1" step="0.1" value={worldConfig.brushStrength} onChange={(e) => onUpdateWorld({ brushStrength: parseFloat(e.target.value) })} className="w-full accent-cyan-500" />
+              </div>
+            </div>
+
+            <button
+              onClick={() => onRunAction('GENERATE_WORLD')}
+              className="w-full py-4 bg-gradient-to-r from-cyan-600 to-emerald-600 hover:from-cyan-500 hover:to-emerald-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-cyan-500/20 mt-4"
+            >
+              🌍 Generate World
+            </button>
           </div>
         );
       case 'data':
