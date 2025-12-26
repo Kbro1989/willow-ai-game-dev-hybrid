@@ -3,10 +3,10 @@
  * Direct access to all AI model types with orchestration support
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { modelRouter } from '../services/modelRouter';
 import { orchestrate } from '../services/agents/orchestratorAgent';
-import { generateCinematic } from '../services/geminiService';
+import { generateCinematic } from '../services/cloudflareService';
 import PipelineBuilder from './PipelineBuilder';
 
 type ForgeMode = 'text' | 'code' | 'image' | 'audio' | 'video' | 'reasoning' | 'orchestrate' | 'pipeline';
@@ -16,6 +16,11 @@ interface ForgeProps {
 }
 
 export const Forge: React.FC<ForgeProps> = ({ onClose }) => {
+  // Debug log to confirm component is mounting
+  useEffect(() => {
+    console.log("⚒️ Forge Component Mounted");
+  }, []);
+
   const [mode, setMode] = useState<ForgeMode>('text');
   const [prompt, setPrompt] = useState('');
   const [output, setOutput] = useState('');
@@ -29,7 +34,7 @@ export const Forge: React.FC<ForgeProps> = ({ onClose }) => {
     if (!prompt.trim() || isProcessing) return;
 
     setIsProcessing(true);
-    setOutput('');
+    setOutput('Forging response...');
 
     try {
       switch (mode) {
@@ -96,6 +101,7 @@ export const Forge: React.FC<ForgeProps> = ({ onClose }) => {
         }
       }
     } catch (error) {
+      console.error("Forge Error:", error);
       setOutput(`❌ Error: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       setIsProcessing(false);
@@ -114,19 +120,20 @@ export const Forge: React.FC<ForgeProps> = ({ onClose }) => {
   ];
 
   return (
-    <div className="flex flex-col h-full bg-[#050a15] text-white">
+    <div className="flex flex-col min-h-[600px] h-full w-full bg-[#050a15] text-white relative z-10 border border-cyan-500/20 shadow-2xl">
       {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b border-cyan-500/20">
+      <div className="flex items-center justify-between p-6 border-b border-cyan-500/30 bg-[#0a1222]">
         <div>
-          <h2 className="text-2xl font-black uppercase tracking-widest text-cyan-50">
+          <h2 className="text-2xl font-black uppercase tracking-widest text-cyan-400">
             ⚒️ The Forge
           </h2>
-          <p className="text-xs text-slate-500 mt-1">Direct model access & orchestration</p>
+          <p className="text-xs text-slate-400 mt-1 uppercase tracking-wider">Direct model access & orchestration</p>
         </div>
         {onClose && (
           <button
             onClick={onClose}
-            className="text-slate-400 hover:text-cyan-400 transition-colors"
+            className="p-2 rounded-lg bg-slate-800 text-slate-400 hover:text-cyan-400 hover:bg-slate-700 transition-all"
+            aria-label="Close Forge"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -137,19 +144,19 @@ export const Forge: React.FC<ForgeProps> = ({ onClose }) => {
 
       {/* Mode Selector */}
       <div className="p-4 border-b border-slate-700 bg-[#0a1222]">
-        <div className="grid grid-cols-8 gap-2">
+        <div className="grid grid-cols-4 md:grid-cols-8 gap-2">
           {modes.map(m => (
             <button
               key={m.id}
               onClick={() => setMode(m.id)}
-              className={`p-3 rounded-xl border transition-all ${mode === m.id
-                ? 'bg-cyan-600 border-cyan-400 shadow-[0_0_20px_rgba(0,242,255,0.3)]'
+              className={`p-3 rounded-xl border transition-all flex flex-col items-center justify-center ${mode === m.id
+                ? 'bg-cyan-600 border-cyan-400 shadow-[0_0_15px_rgba(0,242,255,0.4)]'
                 : 'bg-slate-800 border-slate-700 hover:border-cyan-500/50'
                 }`}
               title={m.desc}
             >
-              <div className="text-2xl mb-1">{m.icon}</div>
-              <div className="text-[9px] font-black uppercase tracking-wider">
+              <div className="text-xl mb-1">{m.icon}</div>
+              <div className="text-[10px] font-black uppercase tracking-tighter">
                 {m.label}
               </div>
             </button>
@@ -159,12 +166,12 @@ export const Forge: React.FC<ForgeProps> = ({ onClose }) => {
 
       {/* Configuration Panel */}
       <div className="p-4 border-b border-slate-700 bg-[#0a1222]/50">
-        <div className="grid grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {(mode === 'text' || mode === 'reasoning') && (
             <>
               <div>
-                <label className="text-[9px] font-black uppercase text-slate-500 block mb-1">
-                  Temperature
+                <label className="text-[10px] font-black uppercase text-slate-400 block mb-2 tracking-widest">
+                  Temperature: <span className="text-cyan-400">{temperature}</span>
                 </label>
                 <input
                   type="range"
@@ -173,19 +180,18 @@ export const Forge: React.FC<ForgeProps> = ({ onClose }) => {
                   step="0.1"
                   value={temperature}
                   onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                  className="w-full"
+                  className="w-full accent-cyan-500"
                 />
-                <span className="text-xs text-cyan-400">{temperature}</span>
               </div>
               <div>
-                <label className="text-[9px] font-black uppercase text-slate-500 block mb-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 block mb-2 tracking-widest">
                   Max Tokens
                 </label>
                 <input
                   type="number"
                   value={maxTokens}
                   onChange={(e) => setMaxTokens(parseInt(e.target.value))}
-                  className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1 text-sm text-cyan-400"
+                  className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1 text-sm text-cyan-400 focus:border-cyan-500 outline-none"
                 />
               </div>
             </>
@@ -193,13 +199,13 @@ export const Forge: React.FC<ForgeProps> = ({ onClose }) => {
 
           {mode === 'code' && (
             <div>
-              <label className="text-[9px] font-black uppercase text-slate-500 block mb-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 block mb-2 tracking-widest">
                 Language
               </label>
               <select
                 value={language}
                 onChange={(e) => setLanguage(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-cyan-400"
+                className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-cyan-400 focus:border-cyan-500 outline-none"
               >
                 <option value="typescript">TypeScript</option>
                 <option value="javascript">JavaScript</option>
@@ -214,13 +220,13 @@ export const Forge: React.FC<ForgeProps> = ({ onClose }) => {
 
           {mode === 'image' && (
             <div>
-              <label className="text-[9px] font-black uppercase text-slate-500 block mb-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 block mb-2 tracking-widest">
                 Image Size
               </label>
               <select
                 value={imageSize}
                 onChange={(e) => setImageSize(e.target.value as any)}
-                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-2 text-sm text-cyan-400"
+                className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-cyan-400 focus:border-cyan-500 outline-none"
               >
                 <option value="512x512">512x512</option>
                 <option value="1024x1024">1024x1024</option>
@@ -231,38 +237,46 @@ export const Forge: React.FC<ForgeProps> = ({ onClose }) => {
       </div>
 
       {/* Input Area */}
-      <div className="flex-1 flex flex-col p-4 overflow-hidden">
+      <div className="flex-1 flex flex-col p-6 overflow-hidden bg-[#050a15]">
         {mode === 'pipeline' ? (
           <PipelineBuilder />
         ) : (
-          <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
-            <div className="flex-1 flex flex-col">
-              <label className="text-[9px] font-black uppercase text-slate-500 block mb-2">
-                Prompt
+          <div className="flex-1 flex flex-col space-y-6 overflow-hidden">
+            <div className="flex-1 flex flex-col min-h-[150px]">
+              <label className="text-[10px] font-black uppercase text-slate-400 block mb-3 tracking-widest">
+                Prompt / Input
               </label>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder={`Enter your ${mode} prompt...`}
-                className="flex-1 bg-slate-900 border border-slate-700 focus:border-cyan-500 rounded-lg p-4 text-sm text-cyan-400 font-mono outline-none resize-none"
+                placeholder={`Type your instructions for ${mode} mode...`}
+                className="flex-1 bg-slate-950 border border-slate-800 focus:border-cyan-500 rounded-xl p-4 text-sm text-cyan-100 font-mono outline-none resize-none shadow-inner transition-colors"
               />
             </div>
 
             <button
               onClick={handleForge}
               disabled={isProcessing || !prompt.trim()}
-              className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-black uppercase text-sm tracking-widest py-4 rounded-lg transition-all shadow-[0_0_20px_rgba(0,242,255,0.3)]"
+              className="w-full bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-600 text-white font-black uppercase text-sm tracking-[0.3em] py-5 rounded-xl transition-all shadow-[0_0_25px_rgba(0,242,255,0.2)] active:scale-[0.98]"
             >
-              {isProcessing ? '⚒️ Forging...' : '⚒️ Forge'}
+              {isProcessing ? (
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin h-5 w-5 mr-3 text-white" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Forging...
+                </span>
+              ) : '⚒️ Forge Execute'}
             </button>
 
             {/* Output Area */}
             {output && (
-              <div className="flex-1 flex flex-col">
-                <label className="text-[9px] font-black uppercase text-slate-500 block mb-2">
-                  Output
+              <div className="flex-1 flex flex-col min-h-[150px] animate-in fade-in slide-in-from-bottom-2">
+                <label className="text-[10px] font-black uppercase text-emerald-500 block mb-3 tracking-widest">
+                  Process Output
                 </label>
-                <div className="flex-1 bg-slate-900 border border-emerald-500/30 rounded-lg p-4 text-sm text-emerald-400 font-mono overflow-auto whitespace-pre-wrap">
+                <div className="flex-1 bg-slate-950 border border-emerald-500/30 rounded-xl p-5 text-sm text-emerald-400 font-mono overflow-auto whitespace-pre-wrap shadow-2xl">
                   {output}
                 </div>
               </div>

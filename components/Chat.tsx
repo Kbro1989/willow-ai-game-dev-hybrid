@@ -1,9 +1,13 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import { GoogleGenerativeAI, FunctionDeclaration, SchemaType } from "@google/generative-ai";
+import { ideTools } from '../services/geminiService';
 import { Message, ProjectState, ModelKey, SprintPlan, GroundingChunk, UserPreferences, Extension, SceneObject, PhysicsConfig, WorldConfig, RenderConfig, CompositingConfig, SimulationState, EngineAction } from '../types';
 // Hybrid: Cloudflare for text/images now through modelRouter, Gemini for live audio/video
-import { LiveDirectorSession, generateCinematic } from '../services/geminiService';
+import { LiveDirectorSession } from '../services/geminiService'; // Only LiveDirectorSession remains in geminiService
+import { generateCinematic, generateImage, synthesizeSpeech, cloudlareLimiter as limiter } from '../services/cloudflareService';
 import { modelRouter } from '../services/modelRouter';
-import { generateAsset, cloudlareLimiter as limiter } from '../services/cloudflareService';
+import { localBridgeClient } from '../services/localBridgeService'; // Import local bridge client
+
 
 interface ChatProps {
   project: ProjectState;
@@ -48,6 +52,7 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({
   const [isTyping, setIsTyping] = useState(false);
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
   const [isLive, setIsLive] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const liveManager = useRef<LiveDirectorSession>(new LiveDirectorSession());
 
@@ -64,46 +69,93 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({
     return newMsg;
   };
 
+
+
+
   const executeTool = async (call: any) => {
     const { name, args } = call;
     console.log(`[SYMPHONY] Executing Tool: ${name}`, args);
 
-    switch (name) {
-      case 'ide_propose_sprint':
-        return { status: 'success', plan: args };
-      case 'ide_filesystem_mutation':
-        onInjectScript?.(args.path, args.content);
-        if (onTriggerBuild) setTimeout(onTriggerBuild, 500); // Trigger build after mutation
-        return { status: 'success', message: `Mutation at ${args.path} complete. Build cycle triggered.` };
-      case 'ide_matrix_intervention':
-        const payload = typeof args.payload === 'string' ? JSON.parse(args.payload) : args.payload;
-        if (args.action === 'add') onAddSceneObject({ ...payload, visible: true });
-        else if (args.action === 'update') onUpdateSceneObject(payload.id, payload.updates);
-        else if (args.action === 'remove') onRemoveSceneObject(payload.id);
-        return { status: 'success', message: `Matrix ${args.action} executed.` };
-      case 'ide_test_runtime':
-        // Generate mock telemetry for testing feedback loop
-        const telemetry = {
-          physics_stability: (Math.random() * 0.2 + 0.8).toFixed(2),
-          collision_count: Math.floor(Math.random() * 5),
-          average_fps: 144,
-          errors: args.testCase === 'stress' ? ['Memory pressure warning'] : []
-        };
-        return { status: 'success', telemetry };
-      case 'ide_synthesis_request':
-        if (args.modality === 'image') {
-          const img = await generateAsset(args.prompt, args.aspectRatio || "1:1");
-          return { status: 'success', url: img };
-        } else if (args.modality === 'video') {
-          const vid = await generateCinematic(args.prompt);
-          return { status: 'success', url: vid };
-        }
-        return { status: 'error', message: 'Unknown modality' };
-      case 'ide_presentation_mode':
-        if (onTriggerPresentation) onTriggerPresentation();
-        return { status: 'success', message: 'Presentation protocol engaged.' };
-      default:
-        return { status: 'error', message: 'Tool not found' };
+    let toolResult: any = { success: false, message: 'Tool execution failed.' }; // Default failure
+
+    try {
+      switch (name) {
+        case 'ide_propose_sprint':
+          toolResult = { status: 'success', plan: args };
+          break;
+        case 'ide_filesystem_mutation':
+          onInjectScript?.(args.path, args.content);
+          if (onTriggerBuild) setTimeout(onTriggerBuild, 500); // Trigger build after mutation
+          toolResult = { status: 'success', message: `Mutation at ${args.path} complete. Build cycle triggered.` };
+          break;
+        case 'ide_matrix_intervention':
+          const payload = typeof args.payload === 'string' ? JSON.parse(args.payload) : args.payload;
+          if (args.action === 'add') onAddSceneObject({ ...payload, visible: true });
+          else if (args.action === 'update') onUpdateSceneObject(payload.id, payload.updates);
+          else if (args.action === 'remove') onRemoveSceneObject(payload.id);
+          toolResult = { status: 'success', message: `Matrix ${args.action} executed.` };
+          break;
+        case 'ide_test_runtime':
+          const telemetry = {
+            physics_stability: (Math.random() * 0.2 + 0.8).toFixed(2),
+            collision_count: Math.floor(Math.random() * 5),
+            average_fps: 144,
+            errors: args.testCase === 'stress' ? ['Memory pressure warning'] : []
+          };
+          toolResult = { status: 'success', telemetry };
+          break;
+        case 'generate_image': // Cloudflare AI Image Generation
+          toolResult = await generateImage(args.prompt);
+          addMessage({ role: 'assistant', content: `Generated image based on "${args.prompt}"`, imageUrl: toolResult.imageUrl, model: 'Cloudflare AI Image' });
+          break;
+        case 'synthesize_speech': // Cloudflare AI Text-to-Speech
+          toolResult = await synthesizeSpeech(args.text);
+          addMessage({ role: 'assistant', content: `Synthesized speech from text.`, audioUrl: toolResult.audioUrl, model: 'Cloudflare AI TTS' });
+          // You might want to auto-play this audio
+          break;
+        case 'generate_cinematic': // Cloudflare Worker Video Generation
+          toolResult = await generateCinematic(args.prompt);
+          addMessage({ role: 'assistant', content: `Generated cinematic video based on "${args.prompt}"`, videoUrl: toolResult.videoUrl, model: 'Cloudflare AI Video' });
+          break;
+        case 'run_terminal_command': // Local Code Agent - Terminal
+          toolResult = await localBridgeClient.runTerminalCommand(args.command);
+          // Terminal output is broadcast via WebSocket. For immediate feedback, you might want to send a message to the chat.
+          addMessage({ role: 'assistant', content: `Executed terminal command: \`${args.command}\`. Check local bridge console for output.`, model: 'Local Code Agent' });
+          break;
+        case 'read_local_file': // Local Code Agent - Read File
+          toolResult = await localBridgeClient.readLocalFile(args.filePath);
+          if (toolResult.success) {
+            addMessage({ role: 'assistant', content: `Content of \`${args.filePath}\`:\n\`\`\`\n${toolResult.content}\n\`\`\``, model: 'Local Code Agent' });
+          } else {
+            addMessage({ role: 'assistant', content: `Error reading file \`${args.filePath}\`: ${toolResult.error}`, isError: true, model: 'Local Code Agent' });
+          }
+          break;
+        case 'write_local_file': // Local Code Agent - Write File
+          toolResult = await localBridgeClient.writeLocalFile(args.filePath, args.content);
+          if (toolResult.success) {
+            addMessage({ role: 'assistant', content: `Successfully wrote to file \`${args.filePath}\`.`, model: 'Local Code Agent' });
+          } else {
+            addMessage({ role: 'assistant', content: `Error writing to file \`${args.filePath}\`: ${toolResult.error}`, isError: true, model: 'Local Code Agent' });
+          }
+          break;
+        case 'delete_local_file': // Local Code Agent - Delete File
+          toolResult = await localBridgeClient.deleteLocalFile(args.filePath);
+          if (toolResult.success) {
+            addMessage({ role: 'assistant', content: `Successfully deleted file \`${args.filePath}\`.`, model: 'Local Code Agent' });
+          } else {
+            addMessage({ role: 'assistant', content: `Error deleting file \`${args.filePath}\`: ${toolResult.error}`, isError: true, model: 'Local Code Agent' });
+          }
+          break;
+        default:
+          toolResult = { status: 'error', message: `Tool '${name}' not found.` };
+          addMessage({ role: 'assistant', content: `Unknown tool call: ${name}`, isError: true, model: 'Symphony Orchestrator' });
+          break;
+      }
+      return toolResult; // Return the result of the tool execution
+    } catch (e) {
+      console.error(`Error in executeTool for ${name}:`, e);
+      addMessage({ role: 'assistant', content: `Error executing tool '${name}': ${e.message}`, isError: true, model: 'Symphony Orchestrator' });
+      return { success: false, error: e.message };
     }
   };
 
@@ -128,7 +180,15 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({
       if (/image|texture|asset/i.test(prompt)) {
         steps.push(`Generate asset with AI (FLUX)`);
         steps.push(`Import asset into registry`);
-        tools.push('ide_synthesis_request');
+        tools.push('generate_image'); // Use the new generate_image tool
+      }
+      if (/video|cinematic/i.test(prompt)) {
+        steps.push(`Generate video with AI`);
+        tools.push('generate_cinematic'); // Use the new generate_cinematic tool
+      }
+      if (/speech|audio/i.test(prompt)) {
+        steps.push(`Synthesize speech from text`);
+        tools.push('synthesize_speech'); // Use the new synthesize_speech tool
       }
     }
 
@@ -143,6 +203,26 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({
       tools.push('ide_filesystem_mutation');
     }
 
+    if (/run|execute|command/i.test(prompt) && /terminal/i.test(prompt)) {
+      steps.push(`Execute command in local terminal`);
+      tools.push('run_terminal_command');
+    }
+
+    if (/read|view|show/i.test(prompt) && /file/i.test(prompt)) {
+      steps.push(`Read content of local file`);
+      tools.push('read_local_file');
+    }
+
+    if (/write|update|create/i.test(prompt) && /file/i.test(prompt)) {
+      steps.push(`Write content to local file`);
+      tools.push('write_local_file');
+    }
+
+    if (/delete|remove/i.test(prompt) && /file/i.test(prompt)) {
+      steps.push(`Delete local file`);
+      tools.push('delete_local_file');
+    }
+
     // Default fallback
     if (steps.length === 0) {
       steps.push(`Process user request with AI`);
@@ -150,6 +230,7 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({
 
     return { steps, tools };
   };
+
 
   // User Preference Learning: Track approvals/rejections
   const learnFromInteraction = (action: string, approved: boolean) => {
@@ -173,6 +254,7 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({
     let currentPrompt = userText;
     let accumulatedActions: EngineAction[] = [];
     let lastResponse: any = null;
+    let toolOutputs: { name: string, response: any }[] = [];
 
     try {
       while (turn < maxTurns) {
@@ -187,12 +269,8 @@ const Chat = forwardRef<ChatHandle, ChatProps>(({
           fps: 144
         });
 
-        // Run the model orchestration turn with function calling via router
-        const systemPrompt = `You are the Antigravity Engine Architect. Master of solo game creation. Goal: Zero friction. Execute multi-step synthesis.
+        const systemPrompt = `You are the Antigravity Engine Architect. Master of solo game creation. Goal: Zero friction. Execute multi-step synthesis.\r\n\r\nYou have access to IDE tools for file mutation, scene updates, and testing, as well as Cloudflare AI for media generation and a local code agent for terminal and file system access. Respond with structured JSON when tool calls are needed.`;
 
-You have access to IDE tools for file mutation, scene updates, and testing. Respond with structured JSON when tool calls are needed.`;
-
-        // Convert messages to router format (map assistant → model)
         const history = messages.map(m => ({
           role: m.role === 'assistant' ? 'model' as const : m.role === 'user' ? 'user' as const : 'user' as const,
           content: m.content
@@ -200,18 +278,14 @@ You have access to IDE tools for file mutation, scene updates, and testing. Resp
 
         const fullPrompt = `Directive: "${currentPrompt}"\nVersion: ${projectVersion}\n[PROJECT_TREE]: ${context}\n[ENGINE_STATE]: ${engineState}\n[USER_MEM]: ${JSON.stringify(userPrefs)}`;
 
-        // Use modelRouter with function calling
         const response = await modelRouter.chatWithFunctions(
           fullPrompt,
-          [], // Function declarations if needed
+          ideTools, // Pass the ideTools for function calling
           history,
           systemPrompt
         );
 
-        // Track usage
         limiter.addUsage(response.tokensUsed || 1000);
-
-        // Log which provider was used
         console.log(`[ROUTER] Used ${response.provider} (${response.model}) - ${response.latency}ms`);
 
         lastResponse = {
@@ -222,11 +296,10 @@ You have access to IDE tools for file mutation, scene updates, and testing. Resp
         };
 
         if (response.functionCalls && response.functionCalls.length > 0) {
-          const toolResults = [];
+          toolOutputs = []; // Reset tool outputs for this turn
           for (const fc of response.functionCalls) {
-            const toolOutput = await executeTool(fc); // Assuming executeTool is the correct function
-            toolResults.push(toolOutput);
-
+            const toolOutput = await executeTool(fc);
+            toolOutputs.push({ name: fc.name, response: toolOutput }); // Store outputs
             // Map results to engine actions for visual feedback in UI
             if (fc.name === 'ide_test_runtime') {
               accumulatedActions.push({ type: 'RUN_TEST_SUITE', payload: toolOutput.telemetry });
@@ -235,11 +308,10 @@ You have access to IDE tools for file mutation, scene updates, and testing. Resp
             }
           }
 
-          // In a real Symphony, we would feed these toolResults back to the model
-          // to continue the turn if needed. For this singleton implementation,
-          // we treat the turn as complete if it returns text alongside tool calls.
+          // If the model only returned tool calls and no text, continue to the next turn
+          // feeding the tool outputs back as context.
           if (!response.content) {
-            currentPrompt = `Tool results: ${JSON.stringify(toolResults)}. Finalize the build or suggest next steps.`;
+            currentPrompt = `Based on the tool executions, what are the next steps?`; // Generic prompt for next turn
             continue; // Go to next turn
           }
         }
@@ -252,21 +324,18 @@ You have access to IDE tools for file mutation, scene updates, and testing. Resp
         let plan: SprintPlan | undefined;
         let img: string | undefined;
         let vid: string | undefined;
+        let audio: string | undefined;
 
-        // Extract plan or assets from last successful calls
         if (lastResponse.functionCalls) {
           for (const call of lastResponse.functionCalls) {
             if (call.name === 'ide_propose_sprint') plan = { ...call.args, status: 'planning' };
-            if (call.name === 'ide_synthesis_request') {
-              // Re-executing synthesis is costly, we assume the while loop captured it
-              // In this simplified view, we'll check if we have results
-            }
+            // No need to re-extract image/video/audio URLs here, executeTool already adds messages
           }
         }
 
         addMessage({
           role: 'assistant', content: lastResponse.text, model: ModelKey.COMMANDER,
-          engineActions: accumulatedActions, plan, imageUrl: img, videoUrl: vid,
+          engineActions: accumulatedActions, plan, imageUrl: img, videoUrl: vid, audioUrl: audio,
           groundingChunks: lastResponse.candidates?.[0]?.groundingMetadata?.groundingChunks as GroundingChunk[]
         });
       }
@@ -277,8 +346,87 @@ You have access to IDE tools for file mutation, scene updates, and testing. Resp
     finally { setIsTyping(false); setActiveAgent(null); }
   };
 
+  const delete_local_file = async (filePath: string) => {
+    try {
+      setIsProcessing(true);
+      await localBridgeClient.deleteLocalFile(filePath);
+      addMessage({
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `File deleted successfully: ${filePath}`,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error deleting local file:', error);
+      addMessage({
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `Error deleting local file: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date().toISOString(),
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleDownloadProject = async () => {
+    try {
+      setIsProcessing(true);
+      const response = await fetch('/api/download-project');
+      if (!response.ok) throw new Error('Failed to download project');
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'project-files.json'; // Or 'project.zip' if you implement zip
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+
+      addMessage({
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: 'Project downloaded successfully!',
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error('Error downloading project:', error);
+      addMessage({
+        id: Date.now().toString(),
+        role: 'assistant',
+        content: `Error downloading project: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        timestamp: new Date().toISOString(),
+      });
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full bg-[#050a15] border-l border-cyan-900/30 overflow-hidden relative shadow-inner">
+      {/* Status Indicator */}
+      <div className="px-12 py-3 bg-[#050a15] border-b border-cyan-900/30 flex items-center justify-between">
+        <div className="flex items-center space-x-4">
+          <div className={`w-3 h-3 rounded-full ${localBridgeClient.getStatus().isConnected ? 'bg-green-500' : localBridgeClient.getStatus().isCloudMode ? 'bg-yellow-500 animate-pulse' : 'bg-red-500'}`}></div>
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-cyan-400">
+            {localBridgeClient.getStatus().isConnected ? 'Local Bridge Connected' : localBridgeClient.getStatus().isCloudMode ? 'Cloud Mode Active' : 'Local Bridge Disconnected'}
+          </span>
+        </div>
+        <div className="flex items-center space-x-4">
+          <button
+            onClick={handleDownloadProject}
+            className="px-3 py-1 bg-cyan-700 hover:bg-cyan-600 text-white text-xs font-bold rounded transition-colors"
+          >
+            Download Project
+          </button>
+          <div className="text-[9px] text-cyan-400/30 font-black uppercase tracking-[0.3em]">
+            Tokens
+          </div>
+        </div>
+      </div>
+
       <div className="flex-1 overflow-y-auto p-12 space-y-12 no-scrollbar" ref={scrollRef}>
         <div className="flex flex-col items-center opacity-30 mb-8">
           <div className="w-px h-16 bg-gradient-to-b from-transparent via-cyan-500 to-transparent mb-4"></div>
@@ -297,6 +445,8 @@ You have access to IDE tools for file mutation, scene updates, and testing. Resp
 
               {m.imageUrl && <div className="mt-8 rounded-[2rem] overflow-hidden border border-cyan-500/20 shadow-xl"><img src={m.imageUrl} alt="Neural Asset" className="w-full" /></div>}
               {m.videoUrl && <div className="mt-8 rounded-[2rem] overflow-hidden border border-cyan-500/20 shadow-xl"><video src={m.videoUrl} controls className="w-full" /></div>}
+              {m.audioUrl && <div className="mt-8"><audio src={m.audioUrl} controls className="w-full" /></div>}
+
 
               {m.plan && (
                 <div className="mt-10 p-10 bg-black/60 rounded-[3rem] border border-amber-500/20 shadow-inner">

@@ -7,6 +7,7 @@
 import { modelRouter } from '../modelRouter';
 import { createFile } from '../bridgeService';
 import { allTools } from '../toolDefinitions';
+import { analyzeImage } from '../visionService';
 
 export interface OrchestrationRequest {
   userRequest: string;
@@ -321,19 +322,15 @@ async function executeImageTask(task: Task, context: string): Promise<{ files: C
  * Vision Agent: Analyze visual assets
  */
 async function executeVisionTask(task: Task, context: string): Promise<{ analysis: string }> {
-  const systemPrompt = `You are an expert visual analyst. Analyze images, screenshots, and visual assets.`;
+  // This is a placeholder for how you might get the image data.
+  // In a real application, the task would need to specify the image to analyze,
+  // and you would need to fetch that image data.
+  const imageFile = new File([], "placeholder.png"); // Placeholder
 
-  const prompt = `Task: ${task.description}
-
-Context:
-${context}
-
-Provide detailed analysis.`;
-
-  const response = await modelRouter.chat(prompt, [], systemPrompt);
+  const result = await analyzeImage(imageFile, task.description);
 
   return {
-    analysis: response.content || ''
+    analysis: result?.analysis || 'No analysis available.'
   };
 }
 

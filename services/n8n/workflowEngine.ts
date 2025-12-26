@@ -5,7 +5,7 @@
 
 import { NodeType, getNodeDefinition } from './nodeDefinitions';
 import { modelRouter } from '../modelRouter';
-import { createFile } from '../bridgeService';
+import { createFile, executeCommand } from '../bridgeService';
 import { orchestrate } from '../agents/orchestratorAgent';
 
 export interface WorkflowNode {
@@ -189,7 +189,69 @@ export class WorkflowEngine {
           }
         };
 
+      case 'http':
+        try {
+          const response = await fetch(node.parameters.url, {
+            method: node.parameters.method || 'GET',
+            headers: { 'Content-Type': 'application/json' },
+            body: node.parameters.method !== 'GET' ? JSON.stringify(inputs.body || {}) : undefined
+          });
+          const data = await response.json();
+          return { response: data };
+        } catch (e) {
+          return { response: { error: String(e) } };
+        }
+
+      case 'discord':
+        try {
+          await fetch(node.parameters.webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ content: inputs.message })
+          });
+          return { success: true };
+        } catch (e) {
+          return { success: false, error: String(e) };
+        }
+
+      case 'git_commit':
+        const commitMsg = node.parameters.message || 'Auto-commit from Neural Engine';
+        // Stage all changes
+        const stageRes = await executeCommand('git add .');
+        if (!stageRes.success) throw new Error(`Git add failed: ${stageRes.error}`);
+
+        // Commit
+        const commitRes = await executeCommand(`git commit -m "${commitMsg}"`);
+        if (!commitRes.success) {
+          // Check if it's just "nothing to commit"
+          if (commitRes.error?.includes('nothing to commit')) return { commitHash: 'no-changes' };
+          throw new Error(`Git commit failed: ${commitRes.error}`);
+        }
+        return { commitHash: 'latest' };
+
+      case 'deploy':
+        const target = node.parameters.target || 'pages';
+        const cmd = target === 'pages' ? 'npx wrangler pages deploy .' : 'npx wrangler deploy';
+        const deployRes = await executeCommand(cmd);
+        if (!deployRes.success) throw new Error(`Deploy failed: ${deployRes.error}`);
+        return { url: 'https://willow-ai-game-dev.pages.dev' }; // TODO: Parse output for real URL
+
+      case 'cloudflare':
+        const action = node.parameters.action || 'deploy_worker';
+        let cfCmd = '';
+        if (action === 'deploy_worker') cfCmd = 'npx wrangler deploy';
+        if (action === 'deploy_pages') cfCmd = 'npx wrangler pages deploy .';
+        if (action === 'update_kv') cfCmd = 'npx wrangler kv:key put ...'; // Simplification
+
+        const cfRes = await executeCommand(cfCmd);
+        return { result: cfRes.success ? cfRes.output : cfRes.error };
+
+      case 'loop':
+        // Minimal loop implementation: Pass-through (Parallel exec not supported yet)
+        return { item: inputs.items ? inputs.items[0] : null };
+
       default:
+        console.warn(`[WORKFLOW] Unhandled node type: ${node.type}`);
         return {};
     }
   }

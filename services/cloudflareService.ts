@@ -115,7 +115,7 @@ export const runProjectManagerReview = async (
  * Image Generation - Uses FLUX via Cloudflare
  * Replaces geminiService.generateAsset
  */
-export const generateAsset = async (
+export const generateImage = async (
   prompt: string,
   aspectRatio: "1:1" | "16:9" | "9:16" = "1:1"
 ) => {
@@ -133,10 +133,58 @@ export const generateAsset = async (
     // Response is raw image bytes
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
-    return url;
+    return { imageUrl: url, model: 'Cloudflare AI Image' };
   } catch (error) {
     console.error("[CLOUDFLARE] Asset Synthesis Failed:", error);
-    return null;
+    return { imageUrl: null, model: 'Cloudflare AI Image' };
+  }
+};
+
+/**
+ * Speech Synthesis - Uses Cloudflare TTS
+ */
+export const synthesizeSpeech = async (text: string) => {
+  try {
+    const response = await fetch(`${WORKER_URL}/api/speech`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Speech synthesis failed: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    return { audioUrl: url, model: 'Cloudflare AI TTS' };
+  } catch (error) {
+    console.error("[CLOUDFLARE] Speech Synthesis Failed:", error);
+    return { audioUrl: null, model: 'Cloudflare AI TTS' };
+  }
+};
+
+/**
+ * Cinematic Video Generation - Uses Cloudflare Video
+ */
+export const generateCinematic = async (prompt: string) => {
+  try {
+    const response = await fetch(`${WORKER_URL}/api/video`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Video generation failed: ${response.status}`);
+    }
+
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    return { videoUrl: url, model: 'Cloudflare AI Video' };
+  } catch (error) {
+    console.error("[CLOUDFLARE] Video Generation Failed:", error);
+    return { videoUrl: null, model: 'Cloudflare AI Video' };
   }
 };
 
@@ -213,7 +261,7 @@ export const auditCode = async (
 };
 
 /**
- * AI Refactor Code - Suggest code improvements
+ * AI Code Refactoring - Suggest improvements to code
  */
 export const refactorCode = async (
   code: string,
@@ -227,16 +275,11 @@ export const refactorCode = async (
     });
 
     if (!response.ok) {
-      console.warn("[CLOUDFLARE] Refactor failed");
       return null;
     }
 
     const data = await response.json() as any;
-    return {
-      original: code,
-      modified: data.refactoredCode || code,
-      explanation: data.explanation || 'No explanation provided.'
-    };
+    return data.suggestion || null;
   } catch (error) {
     console.error("[CLOUDFLARE] Refactor Failed:", error);
     return null;

@@ -3,7 +3,7 @@
  * Wrapper for Google Generative AI with proper error handling
  */
 
-import { GoogleGenAI, FunctionDeclaration } from "@google/genai";
+import { GoogleGenerativeAI, FunctionDeclaration } from "@google/generative-ai";
 
 export interface GeminiTextRequest {
   prompt: string;
@@ -32,14 +32,14 @@ export interface GeminiCodeRequest {
 }
 
 class GeminiProvider {
-  private client: GoogleGenAI | null = null;
+  private client: GoogleGenerativeAI | null = null;
   private apiKey: string | null = null;
 
   constructor() {
     // Check localStorage for temporary key first, then fallback to env
     this.apiKey = localStorage.getItem('TEMP_GEMINI_KEY') || import.meta.env.VITE_GEMINI_API_KEY;
     if (this.apiKey) {
-      this.client = new GoogleGenAI({ apiKey: this.apiKey });
+      this.client = new GoogleGenerativeAI(this.apiKey);
     }
   }
 
@@ -49,7 +49,7 @@ class GeminiProvider {
   refreshApiKey() {
     this.apiKey = localStorage.getItem('TEMP_GEMINI_KEY') || import.meta.env.VITE_GEMINI_API_KEY;
     if (this.apiKey) {
-      this.client = new GoogleGenAI({ apiKey: this.apiKey });
+      this.client = new GoogleGenerativeAI(this.apiKey);
     }
   }
 
@@ -69,11 +69,10 @@ class GeminiProvider {
     }
 
     try {
-      const model = this.client.getGenerativeModel({
-        model: 'gemini-2.0-flash-exp',
-        systemInstruction: request.systemPrompt,
-        tools: request.functionDeclarations ? [{ functionDeclarations: request.functionDeclarations }] : undefined,
-      });
+      const model = this.client.getGenerativeModel({ model: 'gemini-2.0-flash-exp', systemInstruction: request.systemPrompt });
+      if (request.functionDeclarations) {
+        model.tools = [{ functionDeclarations: request.functionDeclarations }];
+      }
 
       // Convert history to Gemini format
       const history = request.history?.map(msg => ({
@@ -150,10 +149,7 @@ class GeminiProvider {
     }
 
     try {
-      const model = this.client.getGenerativeModel({
-        model: 'gemini-2.0-flash-exp', // Using flash for code, adjust if specific code model exists
-        systemInstruction: 'You are an expert programmer. Generate clean, efficient code without explanations unless asked.'
-      });
+      const model = this.client.getGenerativeModel({ model: 'gemini-2.0-flash-exp', systemInstruction: 'You are an expert programmer. Generate clean, efficient code without explanations unless asked.' });
 
       const prompt = request.context
         ? `Language: ${request.language || 'auto'}\nContext:\n${request.context}\n\nTask: ${request.prompt}`

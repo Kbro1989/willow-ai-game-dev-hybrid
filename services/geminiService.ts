@@ -4,13 +4,14 @@
  * All text/image/code functions migrated to cloudflareService.ts
  */
 
-import { GoogleGenAI, Modality, LiveServerMessage, FunctionDeclaration, Type } from "@google/genai";
+import { GoogleGenerativeAI, FunctionDeclaration, SchemaType } from "@google/generative-ai";
 import { ModelKey } from "../types";
 
 // Removed global auto-init to prevent crash on load
-// const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+// const ai = new GoogleGenerativeAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
 
-// Base-64 helpers for Live API
+
+// Base-64 helpers for Live Audio (These will be used in the Cloudflare Worker setup)
 function encode(bytes: Uint8Array) {
   let binary = '';
   const len = bytes.byteLength;
@@ -37,17 +38,17 @@ async function decodeAudioData(data: Uint8Array, ctx: AudioContext, sampleRate: 
   return buffer;
 }
 
-// IDE Tools for Live Audio Session
-const ideTools: FunctionDeclaration[] = [
+// IDE Tools for Live Audio Session (Using string literals for types, compatible with FunctionDeclaration)
+export const ideTools: FunctionDeclaration[] = [
   {
     name: 'ide_propose_sprint',
     parameters: {
-      type: Type.OBJECT,
+      type: SchemaType.OBJECT,
       description: 'Propose a structured architectural roadmap for the project update.',
       properties: {
-        version: { type: Type.STRING },
-        goals: { type: Type.ARRAY, items: { type: Type.STRING } },
-        tasks: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: { type: Type.STRING }, description: { type: Type.STRING }, type: { type: Type.STRING } } } }
+        version: { type: SchemaType.STRING },
+        goals: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } },
+        tasks: { type: SchemaType.ARRAY, items: { type: SchemaType.OBJECT, properties: { id: { type: SchemaType.STRING }, description: { type: SchemaType.STRING }, type: { type: SchemaType.STRING } } } }
       },
       required: ['version', 'goals', 'tasks']
     }
@@ -55,130 +56,256 @@ const ideTools: FunctionDeclaration[] = [
   {
     name: 'ide_filesystem_mutation',
     parameters: {
-      type: Type.OBJECT,
+      type: SchemaType.OBJECT,
       description: 'Inject code into the filesystem.',
-      properties: { path: { type: Type.STRING }, content: { type: Type.STRING }, optimization: { type: Type.STRING } },
+      properties: { path: { type: SchemaType.STRING }, content: { type: SchemaType.STRING }, optimization: { type: SchemaType.STRING } },
       required: ['path', 'content']
     }
   },
   {
     name: 'ide_matrix_intervention',
     parameters: {
-      type: Type.OBJECT,
+      type: SchemaType.OBJECT,
       description: 'Modify 3D entities.',
-      properties: { action: { type: Type.STRING, enum: ['add', 'update', 'remove'] }, payload: { type: Type.STRING } },
+      properties: { action: { type: SchemaType.STRING, enum: ['add', 'update', 'remove'], format: 'enum' }, payload: { type: SchemaType.STRING } },
       required: ['action', 'payload']
     }
   },
   {
     name: 'ide_presentation_mode',
     parameters: {
-      type: Type.OBJECT,
+      type: SchemaType.OBJECT,
       description: 'Engage fullscreen presentation mode.',
-      properties: { active: { type: Type.BOOLEAN } },
+      properties: { active: { type: SchemaType.BOOLEAN } },
       required: ['active']
+    }
+  },
+  {
+    name: 'generate_image',
+    description: 'Generate an image based on a text prompt using Cloudflare AI.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        prompt: { type: SchemaType.STRING, description: 'The text prompt to generate the image from.' },
+      },
+      required: ['prompt']
+    }
+  },
+  {
+    name: 'synthesize_speech',
+    description: 'Convert text to speech using Cloudflare AI.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        text: { type: SchemaType.STRING, description: 'The text to convert to speech.' },
+      },
+      required: ['text']
+    }
+  },
+  {
+    name: 'generate_cinematic',
+    description: 'Generate a cinematic video based on a text prompt via Cloudflare Worker.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        prompt: { type: SchemaType.STRING, description: 'The text prompt to generate the video from.' },
+      },
+      required: ['prompt']
+    }
+  },
+  // --- Local Code Agent Tools ---
+  {
+    name: 'run_terminal_command',
+    description: 'Execute a command in the local terminal via WebSocket tunnel. Use this to install packages, run scripts, or interact with the local filesystem.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        command: { type: SchemaType.STRING, description: 'The terminal command to execute.' },
+      },
+      required: ['command']
+    }
+  },
+  {
+    name: 'read_local_file',
+    description: 'Read the content of a local file via WebSocket tunnel. Provide a relative path from the project root.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        filePath: { type: SchemaType.STRING, description: 'The path to the local file (relative to project root).' },
+      },
+      required: ['filePath']
+    }
+  },
+  {
+    name: 'write_local_file',
+    description: 'Write content to a local file via WebSocket tunnel. Provide a relative path from the project root.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        filePath: { type: SchemaType.STRING, description: 'The path to the local file (relative to project root).' },
+        content: { type: SchemaType.STRING, description: 'The content to write to the file.' },
+      },
+      required: ['filePath', 'content']
+    }
+  },
+  {
+    name: 'delete_local_file',
+    description: 'Delete a local file via WebSocket tunnel. Provide a relative path from the project root.',
+    parameters: {
+      type: SchemaType.OBJECT,
+      properties: {
+        filePath: { type: SchemaType.STRING, description: 'The path to the local file (relative to project root).' },
+      },
+      required: ['filePath']
     }
   }
 ];
 
 /**
  * Live Audio Director Session
- * Real-time voice interaction with AI
- * GEMINI-ONLY - No Cloudflare equivalent
+ * Real-time voice interaction with AI via Cloudflare Worker for Speech-to-Text and Text-to-Speech
+ * (Frontend client implementation)
  */
 export class LiveDirectorSession {
-  private nextStartTime = 0;
-  private inputAudioContext: AudioContext | null = null;
-  private outputAudioContext: AudioContext | null = null;
-  private sources = new Set<AudioBufferSourceNode>();
-  private session: any = null;
+  private ws: WebSocket | null = null;
+  private audioQueue: ArrayBuffer[] = [];
+  private isPlaying = false;
+  private audioContext: AudioContext | null = null;
+  private mediaRecorder: MediaRecorder | null = null;
+
+  constructor() {
+    this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+  }
 
   async connect(onMessage: (msg: string, role: 'user' | 'model') => void) {
-    try {
-      const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-      this.inputAudioContext = new AudioContext({ sampleRate: 16000 });
-      this.outputAudioContext = new AudioContext({ sampleRate: 24000 });
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      console.warn("Already connected to LiveDirectorSession.");
+      return;
+    }
 
-      const sessionPromise = ai.live.connect({
-        model: ModelKey.LIVE_AUDIO,
-        callbacks: {
-          onopen: () => {
-            console.log("[LIVE] Uplink Established.");
-            const source = this.inputAudioContext!.createMediaStreamSource(stream);
-            const scriptProcessor = this.inputAudioContext!.createScriptProcessor(4096, 1, 1);
-            scriptProcessor.onaudioprocess = (e) => {
-              const inputData = e.inputBuffer.getChannelData(0);
-              const int16 = new Int16Array(inputData.length);
-              for (let i = 0; i < inputData.length; i++) int16[i] = inputData[i] * 32768;
-              sessionPromise.then((s: any) => s.sendRealtimeInput({ media: { data: encode(new Uint8Array(int16.buffer)), mimeType: 'audio/pcm;rate=16000' } }));
-            };
-            source.connect(scriptProcessor);
-            scriptProcessor.connect(this.inputAudioContext!.destination);
-          },
-          onmessage: async (message: LiveServerMessage) => {
-            const base64Audio = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-            if (base64Audio) {
-              this.nextStartTime = Math.max(this.nextStartTime, this.outputAudioContext!.currentTime);
-              const audioBuffer = await decodeAudioData(decode(base64Audio), this.outputAudioContext!, 24000, 1);
-              const source = this.outputAudioContext!.createBufferSource();
-              source.buffer = audioBuffer;
-              source.connect(this.outputAudioContext!.destination);
-              source.start(this.nextStartTime);
-              this.nextStartTime += audioBuffer.duration;
-              this.sources.add(source);
-            }
-            if (message.serverContent?.inputTranscription) onMessage(message.serverContent.inputTranscription.text, 'user');
-            if (message.serverContent?.outputTranscription) onMessage(message.serverContent.outputTranscription.text, 'model');
-            if (message.serverContent?.interrupted) {
-              this.sources.forEach(s => { try { s.stop(); } catch (e) { } });
-              this.sources.clear();
-              this.nextStartTime = 0;
-            }
-          },
-          onerror: (e) => console.error("[LIVE] Throughput Fault:", e),
-        },
-        config: {
-          tools: [{ functionDeclarations: ideTools }],
-          responseModalities: [Modality.AUDIO],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } },
-          systemInstruction: "You are the Antigravity Director. A high-level engine architect. Be authoritative, efficient, and precise.",
-          inputAudioTranscription: {},
-          outputAudioTranscription: {},
-        },
-      });
-      this.session = await sessionPromise;
-    } catch (err) {
-      console.error("[LIVE] Initialization Failed:", err);
-      throw err;
+    // Connect to your Cloudflare Worker WebSocket endpoint
+    this.ws = new WebSocket("ws://localhost:8787/live-audio"); // Replace with your actual Worker URL
+
+    this.ws.onopen = () => {
+      console.log("[LIVE] Uplink Established to Cloudflare Worker.");
+      onMessage("Uplink Established.", "model");
+      this.startAudioStreaming();
+    };
+
+    this.ws.onmessage = async (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'transcription') {
+        onMessage(message.text, 'user');
+      } else if (message.type === 'speech') {
+        // Assume message.audio is base64 encoded audio
+        const audioBuffer = await decodeAudioData(decode(message.audio), this.audioContext!, 24000, 1);
+        this.audioQueue.push(audioBuffer.getChannelData(0).buffer);
+        this.processAudioQueue();
+      } else if (message.type === 'model_response') {
+        onMessage(message.text, 'model');
+      }
+    };
+
+    this.ws.onclose = () => {
+      console.log("[LIVE] Uplink Disconnected from Cloudflare Worker.");
+      this.stopAudioStreaming();
+    };
+
+    this.ws.onerror = (error) => {
+      console.error("[LIVE] Throughput Fault with Cloudflare Worker:", error);
+      onMessage("Uplink Fault.", "model");
+    };
+  }
+
+  private async startAudioStreaming() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' }); // Use webm for browser compatibility
+
+      this.mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0 && this.ws && this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(event.data); // Send audio chunks to worker
+        }
+      };
+
+      this.mediaRecorder.start(100); // Send data every 100ms
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
     }
   }
-  close() { if (this.session) this.session.close(); }
+
+  private stopAudioStreaming() {
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.stop();
+    }
+    if (this.audioContext) {
+      this.audioContext.close();
+      this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    }
+    this.audioQueue = [];
+    this.isPlaying = false;
+  }
+
+  private async processAudioQueue() {
+    if (this.audioQueue.length === 0 || this.isPlaying) return;
+
+    this.isPlaying = true;
+    const audioData = this.audioQueue.shift();
+
+    if (audioData && this.audioContext) {
+      const source = this.audioContext.createBufferSource();
+      const buffer = this.audioContext.createBuffer(1, audioData.byteLength / 2, 24000); // Assuming 16-bit PCM
+      buffer.copyToChannel(new Float32Array(audioData), 0);
+      source.buffer = buffer;
+      source.connect(this.audioContext.destination);
+      source.onended = () => {
+        this.isPlaying = false;
+        this.processAudioQueue(); // Play next chunk
+      };
+      source.start();
+    } else {
+      this.isPlaying = false;
+    }
+  }
+
+  close() {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+    this.stopAudioStreaming();
+  }
 }
 
 /**
  * Generate Cinematic Video via VEO
- * GEMINI-ONLY - No Cloudflare equivalent
+ * (Frontend client implementation - will interact with Cloudflare Worker for video generation)
  */
 export const generateCinematic = async (prompt: string) => {
+  console.warn("generateCinematic is currently a placeholder. It will interact with a Cloudflare Worker for video generation.");
   try {
-    if (!(await (window as any).aistudio.hasSelectedApiKey())) await (window as any).aistudio.openSelectKey();
-    const aiLocal = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
-    let operation = await aiLocal.models.generateVideos({
-      model: ModelKey.VEO,
-      prompt,
-      config: { numberOfVideos: 1, resolution: '1080p', aspectRatio: '16:9' }
+    const response = await fetch("http://localhost:8787/generate-video", { // Replace with your actual Worker URL
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt, apiKey: import.meta.env.VITE_GEMINI_API_KEY }), // Pass API key securely via worker
     });
-    while (!operation.done) {
-      await new Promise(r => setTimeout(r, 10000));
-      operation = await aiLocal.operations.getVideosOperation({ operation });
+
+    if (!response.ok) {
+      throw new Error(`Video generation failed: ${response.statusText}`);
     }
-    return `${operation.response?.generatedVideos?.[0]?.video?.uri}&key=${import.meta.env.VITE_GEMINI_API_KEY}`;
+
+    const result = await response.json();
+    // Assuming the worker returns a video URI
+    return result.videoUri;
+
   } catch (error) {
     console.error("[VEO] Cinematic Synthesis Failed:", error);
     throw error;
   }
 };
+
 
 // ============================================
 // MIGRATED TO CLOUDFLARE - See cloudflareService.ts
