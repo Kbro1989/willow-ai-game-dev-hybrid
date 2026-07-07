@@ -1,20 +1,13 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# willow-ai-game-dev-hybrid — Hybrid Game Dev Environment
 
-# Run and deploy your AI Studio app
+> TypeScript · Cloudflare Workers · Vite
 
-This contains everything you need to run your app locally.
+Hybrid local/cloud game development environment. Bridges local development tooling
+with Cloudflare edge deployment for the Willow AI game development pipeline.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1vI4PlM3k-ssv_Ys_MYktLvzXPW5OvYxl
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+```
+src/
+wrangler.toml
+tsconfig.json
+package.json
+```
